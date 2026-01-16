@@ -1,23 +1,52 @@
 import express from 'express';
-// Removed fs, path, dotenv, and .env file logic for Vercel/production. Use process.env only.
+import { PrismaClient } from '@prisma/client';
 const router = express.Router();
+const prisma = new PrismaClient();
 
-// GET /api/facebook-token - returns current Facebook token
-// NOTE: This API should be accessed via the backend server (default port 3001), not the frontend (3000).
-router.get('/facebook-token', (req, res) => {
-  // Always read the latest token from process.env
-  const token = process.env.VITE_FACEBOOK_PRODUCTION_TOKEN;
-  if (token) {
-    res.json({ token });
-  } else {
-    res.status(404).json({ error: 'Token not found in environment variables' });
+
+// GET /api/token/:platform - returns current token for a social platform
+// Supported platforms: facebook, instagram, twitter
+router.get('/token/:platform', async (req, res) => {
+  const platform = req.params.platform;
+  const key = `${platform}_token`;
+  console.log(`[GET /token/${platform}] Looking for key: ${key}`);
+  try {
+    const config = await prisma.config.findUnique({ where: { key } });
+    console.log(`[GET /token/${platform}] DB result:`, config);
+    if (config && config.value) {
+      res.json({ token: config.value });
+    } else {
+      res.status(404).json({ error: `Token for ${platform} not found in database config` });
+    }
+  } catch (error) {
+    console.error(`[GET /token/${platform}] DB error:`, error);
+    res.status(500).json({ error: 'Database error', details: error.message });
   }
 });
 
-// POST /api/update-facebook-token
-router.post('/update-facebook-token', async (req, res) => {
-  // In production (Vercel), updating env vars at runtime is not supported
-  res.status(501).json({ error: 'Updating Facebook token at runtime is not supported in production. Please update the environment variable in Vercel dashboard.' });
+
+// POST /api/update-token/:platform - update token for a social platform
+router.post('/update-token/:platform', async (req, res) => {
+  const platform = req.params.platform;
+  const key = `${platform}_token`;
+  const { token } = req.body;
+  console.log(`[POST /update-token/${platform}] Request body:`, req.body);
+  if (!token) {
+    console.warn(`[POST /update-token/${platform}] Missing token in request body.`);
+    return res.status(400).json({ error: 'Token value required in request body' });
+  }
+  try {
+    const updated = await prisma.config.upsert({
+      where: { key },
+      update: { value: token },
+      create: { key, value: token },
+    });
+    console.log(`[POST /update-token/${platform}] Upserted config:`, updated);
+    res.json({ success: true, config: updated });
+  } catch (error) {
+    console.error(`[POST /update-token/${platform}] DB error:`, error);
+    res.status(500).json({ error: 'Database error', details: error.message });
+  }
 });
 
 export default router;

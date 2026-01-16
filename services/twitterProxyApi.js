@@ -13,11 +13,15 @@ router.post('/twitter/2/tweets', async (req, res) => {
       return res.status(400).json({ error: 'Missing tweet text' });
     }
     // Twitter credentials from .env
-    const apiKey = process.env.VITE_X_API_KEY;
-    const apiSecret = process.env.VITE_X_API_SECRET;
-    const accessToken = process.env.VITE_X_ACCESS_TOKEN;
-    const accessSecret = process.env.VITE_X_ACCESS_SECRET;
-    const twitterApiUrl = process.env.VITE_TWITTER_API_URL || 'https://api.twitter.com';
+    // Fetch credentials from Config table using Prisma or API
+    const prisma = req.app.get('prisma');
+    const config = await prisma.config.findMany();
+    const configMap = Object.fromEntries(config.map(c => [c.key, c.value]));
+    const apiKey = configMap['x_api_key'];
+    const apiSecret = configMap['x_api_secret'];
+    const accessToken = configMap['x_access_token'];
+    const accessSecret = configMap['x_access_secret'];
+    const twitterApiUrl = configMap['twitter_api_url'] || 'https://api.twitter.com';
     const url = `${twitterApiUrl}/2/tweets`;
 
     // Forward headers from client (including Authorization)

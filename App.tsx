@@ -10,9 +10,11 @@ import Monetization from './components/Monetization';
 import Connections from './components/Connections';
 import Credentials from './components/Credentials';
 import Documentation from './components/Documentation';
+import AdminLogin from './components/AdminLogin';
+import AdminPosts from './components/AdminPosts';
 import { ActiveTab, BrandDNA as BrandDNAType, ContentItem, SAMPLE_SCHEDULED_POSTS } from './types';
 import { Sparkles, Bell, Search, X, CheckCircle, Zap } from 'lucide-react';
-import { publishToPlatform } from './services/gemini';
+import { publishToPlatform } from './services/gemini.client';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
@@ -21,6 +23,8 @@ const App: React.FC = () => {
   const [scheduledPosts, setScheduledPosts] = useState<ContentItem[]>(SAMPLE_SCHEDULED_POSTS);
   const [toasts, setToasts] = useState<{id: number, message: string, type: 'success' | 'info'}[]>([]);
   const [autoPost, setAutoPost] = useState<boolean>(false);
+  const [auth, setAuth] = useState<{ token: string; role: string } | null>(null);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
   const addToast = (message: string, type: 'success' | 'info' = 'info') => {
     if (!message) return;
@@ -30,6 +34,87 @@ const App: React.FC = () => {
       setToasts(prev => prev.filter(t => t.id !== id));
     }, 4000);
   };
+
+  // Restore session on app load
+  useEffect(() => {
+    const restoreSession = async () => {
+      try {
+        const storedAuth = localStorage.getItem('brandpilot_auth');
+        if (storedAuth) {
+          const authData = JSON.parse(storedAuth);
+          
+          // Validate the token with the server
+          const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:3001';
+          const response = await fetch(`${backendUrl}/api/validate-token`, {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${authData.token}`
+            }
+          });
+
+          if (response.ok) {
+            setAuth(authData);
+            addToast('Session restored successfully', 'success');
+          } else {
+            // Token is invalid, clear it
+            localStorage.removeItem('brandpilot_auth');
+          }
+        }
+      } catch (error) {
+        console.error('Session restoration failed:', error);
+        localStorage.removeItem('brandpilot_auth');
+      } finally {
+        setIsCheckingAuth(false);
+      }
+    };
+
+    restoreSession();
+  }, []);
+
+  // Save auth to localStorage whenever it changes
+  useEffect(() => {
+    if (auth) {
+      localStorage.setItem('brandpilot_auth', JSON.stringify(auth));
+    } else {
+      localStorage.removeItem('brandpilot_auth');
+    }
+  }, [auth]);
+
+  // Periodic token validation (check every 5 minutes)
+  useEffect(() => {
+    if (!auth) return;
+
+    const validateToken = async () => {
+      try {
+        const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:3001';
+        const response = await fetch(`${backendUrl}/api/validate-token`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${auth.token}`
+          }
+        });
+
+        if (!response.ok) {
+          // Token is invalid or expired
+          localStorage.removeItem('brandpilot_auth');
+          setAuth(null);
+          addToast('Session expired. Please login again.', 'info');
+        }
+      } catch (error) {
+        console.error('Token validation error:', error);
+      }
+    };
+
+    // Validate immediately
+    validateToken();
+
+    // Then validate every 5 minutes
+    const interval = setInterval(validateToken, 5 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [auth]);
 
   // Simulated Agentic Background Worker
   useEffect(() => {
@@ -91,6 +176,18 @@ const App: React.FC = () => {
     setScheduledPosts(prev => [...prev, post]);
   };
 
+  const handleLogout = async () => {
+    if (auth?.token) {
+      await fetch('/api/logout', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${auth.token}` }
+      });
+    }
+    localStorage.removeItem('brandpilot_auth');
+    setAuth(null);
+    addToast('Logged out successfully', 'success');
+  };
+
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard': return <Dashboard onNavigate={navigateWithTopic} hasDNA={!!dna} />;
@@ -117,15 +214,31 @@ const App: React.FC = () => {
       case 'credentials': return <Credentials onAction={addToast} />;
       case 'performance': return <PerformanceBrain onNavigate={navigateWithTopic} />;
       case 'monetization': return <Monetization dna={dna} onAction={addToast} />;
-      case 'documentation':
-          return <Documentation />;
+      case 'documentation': return <Documentation />;
+      case 'adminposts': return <AdminPosts />;
       default: return <Dashboard onNavigate={navigateWithTopic} hasDNA={!!dna} />;
     }
   };
+// Show loading while checking auth
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-600 font-medium">Loading session...</p>
+        </div>
+      </div>
+    );
+  }
+
+  
+  if (!auth) {
+    return <AdminLogin onLogin={(token, role) => setAuth({ token, role })} />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} onAction={addToast} />
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} onAction={addToast} handleLogout={handleLogout} />
       
       <main className="flex-1 ml-64 min-h-screen pb-12">
         <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 py-4 flex justify-between items-center">
@@ -192,7 +305,7 @@ const App: React.FC = () => {
 
       {/* Persistent AI Agent Floating Button */}
       <div className="fixed bottom-8 right-8 z-50">
-        <button className="w-16 h-16 bg-slate-900 text-white rounded-2xl flex items-center justify-center shadow-2xl hover:scale-105 transition-transform group relative">
+        <div className="w-16 h-16 bg-slate-900 text-white rounded-2xl flex items-center justify-center shadow-2xl hover:scale-105 transition-transform group relative">
           <Sparkles className={autoPost ? "animate-spin text-indigo-400" : "animate-pulse"} size={28} />
           <div className="absolute bottom-full right-0 mb-4 w-64 bg-white p-4 rounded-2xl border border-slate-200 shadow-xl opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all text-left pointer-events-none group-hover:pointer-events-auto">
             <p className="text-xs font-bold text-indigo-600 uppercase mb-1">Agent Suggestion</p>
@@ -214,7 +327,7 @@ const App: React.FC = () => {
               </button>
             )}
           </div>
-        </button>
+        </div>
       </div>
     </div>
   );

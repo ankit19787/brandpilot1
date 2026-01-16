@@ -66,53 +66,58 @@ const Credentials: React.FC<CredentialsProps> = ({ onAction }) => {
   const [showApiCollection, setShowApiCollection] = useState(false);
 
   // Production Meta Access Tokens (Verified)
-  const PRODUCTION_META_TOKEN = import.meta.env.VITE_INSTAGRAM_WA_TOKEN;
-  const FACEBOOK_SPECIFIC_TOKEN = import.meta.env.VITE_FACEBOOK_PRODUCTION_TOKEN;
-  const X_API_KEY = import.meta.env.VITE_X_API_KEY;
-  const X_API_SECRET = import.meta.env.VITE_X_API_SECRET;
-  const X_ACCESS_TOKEN = import.meta.env.VITE_X_ACCESS_TOKEN;
-  const X_ACCESS_SECRET = import.meta.env.VITE_X_ACCESS_SECRET;
+  // All credentials will be loaded from the Config table via API
 
-  const [platforms, setPlatforms] = useState<PlatformCreds[]>([
-    // LinkedIn removed
-    {
-      id: 'x',
-      name: 'X (Twitter)',
-      icon: Twitter,
-      color: 'text-sky-500',
-      isConfigured: true,
-      fields: [
-        { label: 'X API Key (Consumer Key)', key: 'x_api_key', value: X_API_KEY, hidden: false },
-        { label: 'X API Secret (Consumer Secret)', key: 'x_api_secret', value: X_API_SECRET, hidden: true },
-        { label: 'X Access Token', key: 'x_access_token', value: X_ACCESS_TOKEN, hidden: true },
-        { label: 'X Access Secret', key: 'x_access_secret', value: X_ACCESS_SECRET, hidden: true },
-      ]
-    },
-    // YouTube and WhatsApp removed
-    {
-      id: 'facebook',
-      name: 'Facebook',
-      icon: Facebook,
-      color: 'text-blue-700',
-      isConfigured: true,
-      fields: [
-        { label: 'App ID', key: 'fb_app_id', value: '1382104133353230', hidden: false },
-        { label: 'Page ID', key: 'fb_page_id', value: '767683059766101', hidden: false },
-        { label: 'Page Access Token', key: 'fb_token', value: FACEBOOK_SPECIFIC_TOKEN, hidden: true },
-      ]
-    },
-    {
-      id: 'instagram',
-      name: 'Instagram Graph API',
-      icon: Instagram,
-      color: 'text-pink-600',
-      isConfigured: true,
-      fields: [
-        { label: 'Instagram Business ID', key: 'ig_business_id', value: '17841478383986099', hidden: false },
-        { label: 'Access Token', key: 'ig_access_token', value: PRODUCTION_META_TOKEN, hidden: true },
-      ]
+  const [platforms, setPlatforms] = useState<PlatformCreds[]>([]);
+
+  // Fetch credentials from Config table on mount
+  React.useEffect(() => {
+    async function fetchCredentials() {
+      try {
+        const res = await fetch(`${BACKEND_API_URL}/api/config`);
+        const configs = await res.json();
+        // Dynamically group config keys by platform
+        const platformMap: Record<string, PlatformCreds> = {};
+        configs.forEach(c => {
+          let platformId = 'other';
+          // Improved platform detection for all relevant keys
+          if (
+            c.key.includes('facebook') ||
+            c.key.startsWith('fb_') ||
+            c.key === 'facebook_token'
+          ) platformId = 'facebook';
+          else if (
+            c.key.includes('instagram') ||
+            c.key.startsWith('ig_') ||
+            c.key === 'instagram_token'
+          ) platformId = 'instagram';
+          else if (c.key.includes('x_') || c.key.includes('twitter')) platformId = 'x';
+          else if (c.key.includes('cloudinary')) platformId = 'cloudinary';
+          // Add more platform detection as needed
+          if (!platformMap[platformId]) {
+            platformMap[platformId] = {
+              id: platformId,
+              name: platformId.charAt(0).toUpperCase() + platformId.slice(1),
+              icon: platformId === 'facebook' ? Facebook : platformId === 'instagram' ? Instagram : platformId === 'x' ? Twitter : Database,
+              color: platformId === 'facebook' ? 'text-blue-700' : platformId === 'instagram' ? 'text-pink-600' : platformId === 'x' ? 'text-sky-500' : 'text-slate-500',
+              isConfigured: true,
+              fields: []
+            };
+          }
+          platformMap[platformId].fields.push({
+            label: c.key,
+            key: c.key,
+            value: c.value || '',
+            hidden: c.key.toLowerCase().includes('secret') || c.key.toLowerCase().includes('token')
+          });
+        });
+        setPlatforms(Object.values(platformMap));
+      } catch (err) {
+        // Ignore if backend not available
+      }
     }
-  ]);
+    fetchCredentials();
+  }, []);
 
   const activePlatform = platforms.find(p => p.id === selectedPlatform);
 
@@ -143,24 +148,68 @@ const generateSignature = async (params) => {
     setShowSecrets(prev => ({ ...prev, [fieldKey]: !prev[fieldKey] }));
   };
 
-  const handleSave = (platformId: string) => {
-    onAction(`Vault for ${platformId.toUpperCase()} has been hardware-encrypted and updated.`, 'success');
+  // Controlled input handler for credential fields
+  const handleFieldChange = (platformId: string, fieldKey: string, value: string) => {
+    setPlatforms(prev => prev.map(p =>
+      p.id === platformId
+        ? { ...p, fields: p.fields.map(f => f.key === fieldKey ? { ...f, value } : f) }
+        : p
+    ));
+  };
+
+  const handleSave = async (platformId: string) => {
+    const platform = platforms.find(p => p.id === platformId);
+    if (!platform) return;
+    let success = true;
+    for (const field of platform.fields) {
+      try {
+        // If the field is a token, use the new API endpoint
+        if (field.key.endsWith('_token') || field.key === 'ig_access_token' || field.key === 'x_access_token') {
+          const res = await fetch(`${BACKEND_API_URL}/api/update-token/${platformId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: field.value })
+          });
+          const data = await res.json();
+          if (!data || data.error) success = false;
+        } else {
+          // For other config fields, use the old endpoint
+          const res = await fetch(`${BACKEND_API_URL}/api/config`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: field.key, value: field.value })
+          });
+          const data = await res.json();
+          if (!data || data.error) success = false;
+        }
+      } catch (err) {
+        success = false;
+      }
+    }
+    if (success) {
+      onAction(`Vault for ${platformId.toUpperCase()} updated in database.`, 'success');
+    } else {
+      onAction(`Failed to update credentials for ${platformId}.`, 'info');
+    }
   };
 
   // Refresh Facebook Token handler
   const handleRefreshFacebookToken = async () => {
-    const newToken = prompt('Enter new Facebook token:');
+    // Use the current value from the form
+    const facebookPlatform = platforms.find(p => p.id === 'facebook');
+    const tokenField = facebookPlatform?.fields.find(f => f.key === 'fb_token');
+    const newToken = tokenField?.value;
     if (!newToken) return;
     try {
-      const res = await fetch(`${BACKEND_API_URL}/api/update-facebook-token`, {
+      const res = await fetch(`${BACKEND_API_URL}/api/update-token/facebook`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ newToken })
+        body: JSON.stringify({ token: newToken })
       });
       const data = await res.json();
       if (data.success) {
         // Fetch latest token from backend
-        const tokenRes = await fetch(`${BACKEND_API_URL}/api/facebook-token`);
+        const tokenRes = await fetch(`${BACKEND_API_URL}/api/token/facebook`);
         const tokenData = await tokenRes.json();
         // Update local state for Facebook token
         setPlatforms(prev => prev.map(p =>
@@ -302,7 +351,8 @@ const generateSignature = async (params) => {
                         <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-500 transition-colors" />
                         <input 
                           type={field.hidden && !showSecrets[field.key] ? "password" : "text"}
-                          defaultValue={field.value}
+                          value={field.value}
+                          onChange={e => handleFieldChange(activePlatform.id, field.key, e.target.value)}
                           className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 font-mono text-sm transition-all"
                         />
                       </div>

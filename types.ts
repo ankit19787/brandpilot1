@@ -89,4 +89,12 @@ export interface PlatformConnection {
   lastSync?: string;
 }
 
-export type ActiveTab = 'dashboard' | 'dna' | 'strategist' | 'engine' | 'performance' | 'monetization' | 'calendar' | 'connections' | 'credentials' | 'documentation';
+export type PlanType = 'free' | 'pro' | 'business' | 'enterprise';
+
+export interface UserPlan {
+  plan: PlanType;
+  credits: number;
+  maxCredits: number;
+}
+
+export type ActiveTab = 'dashboard' | 'dna' | 'strategist' | 'engine' | 'performance' | 'monetization' | 'calendar' | 'connections' | 'credentials' | 'documentation' | 'adminposts';

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Coins, Target, ArrowUpRight, Loader2, Sparkles, DollarSign } from 'lucide-react';
-import { getMonetizationPlan } from '../services/gemini';
+import { getMonetizationPlan } from '../services/gemini.client';
 import { BrandDNA, MonetizationIdea } from '../types';
 
 interface MonetizationProps {

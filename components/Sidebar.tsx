@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   LayoutDashboard, 
   Fingerprint, 
@@ -11,18 +11,21 @@ import {
   Calendar,
   Link2,
   Key,
-  Info
+  Info,
+  LogOut
 } from 'lucide-react';
 import { ActiveTab } from '../types';
+import PlanModal from './PlanModal';
 
 interface SidebarProps {
   activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
-  onAction: (msg: string) => void;
+  onAction: (msg: string, type?: 'success' | 'info') => void;
   handleLogout: () => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onAction, handleLogout }) => {
+  const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'dna', label: 'Brand DNA', icon: Fingerprint },
@@ -34,6 +37,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onAction, ha
     { id: 'performance', label: 'Performance', icon: BarChart3 },
     { id: 'monetization', label: 'Monetization', icon: Coins },
     { id: 'documentation', label: 'Documentation', icon: Info },
+    { id: 'adminposts', label: 'Admin Posts', icon: Settings },
   ];
 
   return (
@@ -74,7 +78,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onAction, ha
           </div>
           <p className="text-sm text-slate-300 mb-3 font-medium">7,500 / 10,000 credits</p>
           <button 
-            onClick={() => onAction('Upgrade flow coming soon...')}
+            onClick={() => setIsPlanModalOpen(true)}
             className="w-full py-2 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-lg text-sm font-bold hover:bg-indigo-500/20 transition-all"
           >
             Upgrade Plan
@@ -91,11 +95,20 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onAction, ha
 
         <button 
           onClick={handleLogout}
-          className="w-full mt-4 flex items-center gap-3 px-4 py-3 rounded-xl text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition-all font-medium"
+          className="w-full mt-2 flex items-center gap-3 px-4 py-3 rounded-xl text-rose-400 hover:bg-slate-800 hover:text-rose-300 transition-all font-medium"
         >
+          <LogOut size={20} />
           Logout
         </button>
       </div>
+
+      {/* Plan Modal */}
+      <PlanModal 
+        isOpen={isPlanModalOpen} 
+        onClose={() => setIsPlanModalOpen(false)}
+        onAction={onAction}
+        currentPlan="pro"
+      />
     </div>
   );
 };

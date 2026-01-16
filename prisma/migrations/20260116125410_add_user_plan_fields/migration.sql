@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "public"."User" ADD COLUMN     "credits" INTEGER NOT NULL DEFAULT 1000,
+ADD COLUMN     "maxCredits" INTEGER NOT NULL DEFAULT 1000,
+ADD COLUMN     "plan" TEXT NOT NULL DEFAULT 'free';

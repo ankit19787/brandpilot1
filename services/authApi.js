@@ -1,45 +1,49 @@
 import express from 'express';
 import bodyParser from 'body-parser';
+import { PrismaClient } from '@prisma/client';
 
 const router = express.Router();
-
-// Demo users (for demo only, do not use in production)
-const users = [
-  { username: 'admin', password: 'admin123', role: 'admin' },
-  { username: 'demo1', password: 'demo123', role: 'user' },
-  { username: 'demo2', password: 'demo123', role: 'user' }
-];
-
-// Simple session store (in-memory)
-const sessions = {};
+const prisma = new PrismaClient();
 
 // POST /api/login
-router.post('/login', (req, res) => {
+router.post('/login', async (req, res) => {
   const { username, password } = req.body;
-  const user = users.find(u => u.username === username && u.password === password);
-  if (!user) {
+  // Find user in database
+  const user = await prisma.user.findUnique({ where: { username } });
+  if (!user || user.passwordHash !== password) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
-  // Create a simple session token
-  const token = Math.random().toString(36).substr(2);
-  sessions[token] = { username: user.username, role: user.role };
-  res.json({ token, role: user.role });
+  // Create session in database
+  const session = await prisma.session.create({
+    data: {
+      userId: user.id,
+      token: Math.random().toString(36).substr(2),
+      createdAt: new Date(),
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+    }
+  });
+  res.json({ token: session.token, role: user.role });
 });
 
 // GET /api/me
-router.get('/me', (req, res) => {
+router.get('/me', async (req, res) => {
   const token = req.headers.authorization?.replace('Bearer ', '');
-  if (!token || !sessions[token]) {
+  if (!token) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
-  res.json(sessions[token]);
+  const session = await prisma.session.findUnique({ where: { token } });
+  if (!session) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const user = await prisma.user.findUnique({ where: { id: session.userId } });
+  res.json({ username: user.username, role: user.role });
 });
 
 // POST /api/logout
-router.post('/logout', (req, res) => {
+router.post('/logout', async (req, res) => {
   const token = req.headers.authorization?.replace('Bearer ', '');
-  if (token && sessions[token]) {
-    delete sessions[token];
+  if (token) {
+    await prisma.session.deleteMany({ where: { token } });
   }
   res.json({ success: true });
 });

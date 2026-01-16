@@ -120,7 +120,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate, hasDNA }) => {
               <option>Last 30 Days</option>
             </select>
           </div>
-          <div className="h-[300px] w-full">
+          <div className="h-[300px] w-full min-h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={data}>
                 <defs>

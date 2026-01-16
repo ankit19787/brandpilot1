@@ -1,0 +1,62 @@
+{
+  "info": {
+    "name": "BrandPilot OS API",
+    "description": "API collection for Facebook and Twitter proxy endpoints.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Get Facebook Token",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3001/api/facebook-token",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3001",
+          "path": ["api", "facebook-token"]
+        }
+      }
+    },
+    {
+      "name": "Update Facebook Token (Not Supported in Production)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"newToken\": \"YOUR_NEW_TOKEN\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3001/api/update-facebook-token",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3001",
+          "path": ["api", "update-facebook-token"]
+        }
+      }
+    },
+    {
+      "name": "Post Tweet (Proxy to Twitter)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "OAuth ... (see app logic for signature)" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"text\": \"Hello from BrandPilot!\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3001/api/twitter/2/tweets",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3001",
+          "path": ["api", "twitter", "2", "tweets"]
+        }
+      }
+    }
+  ]
+}

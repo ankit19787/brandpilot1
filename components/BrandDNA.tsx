@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Fingerprint, Loader2, Sparkles, CheckCircle2, MessageSquare, Play, GraduationCap } from 'lucide-react';
-import { analyzeBrandDNA } from '../services/gemini';
+import { analyzeBrandDNA } from '../services/gemini.client';
 import { BrandDNA as BrandDNAType, SAMPLE_DNA, TUTORING_TIK_DNA } from '../types';
 
 interface BrandDNAProps {

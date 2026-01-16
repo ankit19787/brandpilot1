@@ -1,26 +1,44 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { BrandDNA, ContentStrategy } from "../types";
 import { uploadToCloudinary } from "./cloudinaryUpload";
+import { PrismaClient } from '@prisma/client';
 
-const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY || "" });
+const prisma = new PrismaClient();
+
+// Helper to fetch config value from DB
+async function getConfigValue(key: string): Promise<string> {
+  const config = await prisma.config.findUnique({ where: { key } });
+  return config?.value || "";
+}
 
 // Configurable caption length for Instagram (can be changed per client or .env)
-export const INSTAGRAM_CAPTION_LENGTH = Number(import.meta.env.VITE_INSTAGRAM_CAPTION_LENGTH) || 300;
+export async function getInstagramCaptionLength(): Promise<number> {
+  const val = await getConfigValue('instagram_caption_length');
+  return Number(val) || 300;
+}
 
-// All credentials loaded from .env
-const INSTAGRAM_WA_TOKEN = import.meta.env.VITE_INSTAGRAM_WA_TOKEN;
-const FACEBOOK_PRODUCTION_TOKEN = import.meta.env.VITE_FACEBOOK_PRODUCTION_TOKEN;
-const X_API_KEY = import.meta.env.VITE_X_API_KEY;
-const X_API_SECRET = import.meta.env.VITE_X_API_SECRET;
-const X_ACCESS_TOKEN = import.meta.env.VITE_X_ACCESS_TOKEN;
-const X_ACCESS_SECRET = import.meta.env.VITE_X_ACCESS_SECRET;
-const INSTAGRAM_BUSINESS_ID = import.meta.env.VITE_INSTAGRAM_BUSINESS_ID;
-const FACEBOOK_PAGE_ID = import.meta.env.VITE_FACEBOOK_PAGE_ID;
+// Helper to get all credentials at once
+async function getAllCredentials() {
+  const configs = await prisma.config.findMany();
+  return Object.fromEntries(configs.map((c: any) => [c.key, c.value]));
+}
 
-const TWITTER_API_URL = import.meta.env.VITE_TWITTER_API_URL;
-const INSTAGRAM_API_URL = import.meta.env.VITE_INSTAGRAM_API_URL;
-const FACEBOOK_API_URL = import.meta.env.VITE_FACEBOOK_API_URL;
-const FACEBOOK_API_VERSION = import.meta.env.VITE_FACEBOOK_API_VERSION;
+// Helper to get Gemini API key
+async function getGeminiApiKey() {
+  return await getConfigValue('gemini_api_key');
+}
+
+// Helper to get platform API URLs and versions
+async function getPlatformConfig() {
+  return {
+    twitterApiUrl: await getConfigValue('twitter_api_url'),
+    instagramApiUrl: await getConfigValue('instagram_api_url'),
+    facebookApiUrl: await getConfigValue('facebook_api_url'),
+    facebookApiVersion: await getConfigValue('facebook_api_version'),
+    backendApiUrl: await getConfigValue('backend_api_url'),
+  };
+}
 
 /**
  * RFC 3986 Percent Encoding
@@ -65,9 +83,11 @@ async function generateTwitterOAuth1Signature(
 
 export const analyzeBrandDNA = async (pastPosts: string): Promise<BrandDNA> => {
   try {
-    if (!import.meta.env.VITE_API_KEY) {
-      throw new Error("API_KEY is not configured. Please add VITE_API_KEY to your .env file.");
+    const apiKey = await getGeminiApiKey();
+    if (!apiKey) {
+      throw new Error("Gemini API key is not configured in the database.");
     }
+    const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
       contents: `Analyze these social media posts for Brand DNA: ${pastPosts}`,
@@ -102,9 +122,11 @@ export const analyzeBrandDNA = async (pastPosts: string): Promise<BrandDNA> => {
 
 export const generateContentStrategy = async (dna: BrandDNA): Promise<ContentStrategy> => {
   try {
-    if (!import.meta.env.VITE_API_KEY) {
-      throw new Error("API_KEY is not configured. Please add VITE_API_KEY to your .env file.");
+    const apiKey = await getGeminiApiKey();
+    if (!apiKey) {
+      throw new Error("Gemini API key is not configured in the database.");
     }
+    const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
       contents: `Create a 7-day strategy for: ${JSON.stringify(dna)}`,
@@ -145,11 +167,13 @@ export const generateContentStrategy = async (dna: BrandDNA): Promise<ContentStr
 
 export const generatePost = async (platform: string, topic: string, dna: BrandDNA): Promise<string> => {
   try {
-    if (!import.meta.env.VITE_API_KEY) {
-      throw new Error("API_KEY is not configured. Please add VITE_API_KEY to your .env file.");
+    const apiKey = await getGeminiApiKey();
+    if (!apiKey) {
+      throw new Error("Gemini API key is not configured in the database.");
     }
-    // For all platforms, request a post/caption of the configured length
-    let prompt = `Generate a ${platform} post about \"${topic}\". DNA: ${JSON.stringify(dna)}\nLimit the post/caption to ${INSTAGRAM_CAPTION_LENGTH} characters or less.`;
+    const ai = new GoogleGenAI({ apiKey });
+    const captionLength = await getInstagramCaptionLength();
+    let prompt = `Generate a ${platform} post about \"${topic}\". DNA: ${JSON.stringify(dna)}\nLimit the post/caption to ${captionLength} characters or less.`;
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
       contents: prompt,
@@ -170,9 +194,11 @@ export const generatePost = async (platform: string, topic: string, dna: BrandDN
 
 export const generateImage = async (topic: string, dna: BrandDNA): Promise<string> => {
   try {
-    if (!import.meta.env.VITE_API_KEY) {
-      throw new Error("API_KEY is not configured. Please add VITE_API_KEY to your .env file.");
+    const apiKey = await getGeminiApiKey();
+    if (!apiKey) {
+      throw new Error("Gemini API key is not configured in the database.");
     }
+    const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
       contents: { parts: [{ text: `Professional cinematic visual for: ${topic}. Tone: ${dna.voice}.` }] },
@@ -194,8 +220,8 @@ export const generateImage = async (topic: string, dna: BrandDNA): Promise<strin
 
 // Utility to fetch latest Facebook token from backend
 export async function fetchFacebookTokenFromBackend(): Promise<string> {
-  const backendUrl = import.meta.env.VITE_BACKEND_API_URL;
-  const res = await fetch(`${backendUrl}/api/facebook-token`);
+  const { backendApiUrl } = await getPlatformConfig();
+  const res = await fetch(`${backendApiUrl}/api/facebook-token`);
   const data = await res.json();
   if (!res.ok || !data.token) {
     throw new Error(data.error || 'Failed to fetch Facebook token from backend');
@@ -204,7 +230,9 @@ export async function fetchFacebookTokenFromBackend(): Promise<string> {
 }
 
 export async function refreshFacebookToken(longLivedToken: string): Promise<string> {
-  const url = `https://graph.facebook.com/v20.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${import.meta.env.VITE_FACEBOOK_APP_ID}&client_secret=${import.meta.env.VITE_FACEBOOK_APP_SECRET}&fb_exchange_token=${longLivedToken}`;
+  const appId = await getConfigValue('facebook_app_id');
+  const appSecret = await getConfigValue('facebook_app_secret');
+  const url = `https://graph.facebook.com/v20.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${longLivedToken}`;
   const res = await fetch(url);
   const data = await res.json();
   if (!res.ok || !data.access_token) {
@@ -239,8 +267,8 @@ export async function ensureLongLivedFacebookToken(token: string): Promise<strin
   // Facebook long-lived tokens are ~180 chars, short-lived are ~70-90 chars
   if (token.length < 120) {
     // Exchange for long-lived token
-    const appId = import.meta.env.VITE_FACEBOOK_APP_ID;
-    const appSecret = import.meta.env.VITE_FACEBOOK_APP_SECRET;
+    const appId = await getConfigValue('facebook_app_id');
+    const appSecret = await getConfigValue('facebook_app_secret');
     const url = `https://graph.facebook.com/v20.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${token}`;
     const res = await fetch(url);
     const data = await res.json();
@@ -259,32 +287,32 @@ export const platformAPI = {
     onStatus(`Preparing ${platform} transmission...`);
 
     if (platform === 'X (Twitter)') {
-      const twitterApiUrl = `${TWITTER_API_URL}/2/tweets`;
-      // Use backend API URL from env, fallback to localhost:3001
-      const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:3001';
-      const proxyUrl = `${backendUrl}/api/twitter/2/tweets`;
+      const creds = await getAllCredentials();
+      const { twitterApiUrl, backendApiUrl } = await getPlatformConfig();
+      const twitterApiFullUrl = `${twitterApiUrl}/2/tweets`;
+      const proxyUrl = `${backendApiUrl}/api/twitter/2/tweets`;
       onStatus("Calculating OAuth 1.0a HMAC-SHA1 signature...");
-      
+
       const nonce = Array.from(window.crypto.getRandomValues(new Uint8Array(16)))
         .map((b) => b.toString(16).padStart(2, "0"))
         .join("");
       const timestamp = Math.floor(Date.now() / 1000).toString();
 
       const oauthParams: Record<string, string> = {
-        oauth_consumer_key: X_API_KEY,
-        oauth_token: X_ACCESS_TOKEN,
+        oauth_consumer_key: creds['x_api_key'],
+        oauth_token: creds['x_access_token'],
         oauth_nonce: nonce,
         oauth_timestamp: timestamp,
         oauth_signature_method: "HMAC-SHA1",
         oauth_version: "1.0",
       };
 
-      const signature = await generateTwitterOAuth1Signature("POST", twitterApiUrl, oauthParams, X_API_SECRET, X_ACCESS_SECRET);
+      const signature = await generateTwitterOAuth1Signature("POST", twitterApiFullUrl, oauthParams, creds['x_api_secret'], creds['x_access_secret']);
       oauthParams["oauth_signature"] = signature;
 
       const authHeader = "OAuth " + Object.keys(oauthParams)
         .sort()
-        .map((k) => `${rfc3986Encode(k)}="${rfc3986Encode(oauthParams[k])}"`)
+        .map((k) => `${rfc3986Encode(k)}=\"${rfc3986Encode(oauthParams[k])}\"`)
         .join(", ");
 
       onStatus("Sending direct payload to api.twitter.com...");
@@ -317,17 +345,19 @@ export const platformAPI = {
     }
 
     if (platform === 'Instagram' || platform === 'Facebook') {
+      const creds = await getAllCredentials();
+      const { instagramApiUrl, facebookApiUrl, facebookApiVersion } = await getPlatformConfig();
       const isInstagram = platform === 'Instagram';
       let token;
       if (isInstagram) {
-        token = INSTAGRAM_WA_TOKEN;
+        token = creds['instagram_wa_token'];
       } else {
         // Always fetch latest Facebook token from backend
         token = await fetchFacebookTokenFromBackend();
       }
-      const id = isInstagram ? INSTAGRAM_BUSINESS_ID : FACEBOOK_PAGE_ID;
-      const apiUrl = isInstagram ? INSTAGRAM_API_URL : FACEBOOK_API_URL;
-      const apiVersion = FACEBOOK_API_VERSION;
+      const id = isInstagram ? creds['instagram_business_id'] : creds['facebook_page_id'];
+      const apiUrl = isInstagram ? instagramApiUrl : facebookApiUrl;
+      const apiVersion = facebookApiVersion;
 
       try {
         // --- Unified logic for Instagram and Facebook image posting ---
@@ -368,7 +398,8 @@ export const platformAPI = {
         }
 
         // Enforce caption/content length for all platforms
-        const caption = content.length > INSTAGRAM_CAPTION_LENGTH ? content.slice(0, INSTAGRAM_CAPTION_LENGTH) : content;
+        const captionLength = await getInstagramCaptionLength();
+        const caption = content.length > captionLength ? content.slice(0, captionLength) : content;
 
         if (isInstagram) {
           onStatus("Step 2: Creating Instagram Media Container...");
@@ -458,9 +489,11 @@ export const publishToPlatform = async (platform: string, content: string, metad
 
 export const getMonetizationPlan = async (dna: BrandDNA, metrics: any): Promise<any> => {
   try {
-    if (!import.meta.env.VITE_API_KEY) {
-      throw new Error("API_KEY is not configured. Please add VITE_API_KEY to your .env file.");
+    const apiKey = await getGeminiApiKey();
+    if (!apiKey) {
+      throw new Error("Gemini API key is not configured in the database.");
     }
+    const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
       contents: `Monetization ideas for: ${JSON.stringify(dna)}`,
@@ -479,3 +512,65 @@ export const getMonetizationPlan = async (dna: BrandDNA, metrics: any): Promise<
     throw new Error(`Monetization synthesis failed: ${error.message}`);
   }
 };
+
+// Add function to create a post in the database
+export async function createPost({ userId, platform, content, imageUrl, status, scheduledFor }: {
+  userId: string,
+  platform: string,
+  content: string,
+  imageUrl?: string,
+  status: string,
+  scheduledFor?: Date
+}) {
+  return await prisma.post.create({
+    data: {
+      userId,
+      platform,
+      content,
+      imageUrl,
+      status,
+      scheduledFor,
+      createdAt: new Date()
+    }
+  });
+}
+
+// Add function to fetch posts for a user
+export async function getUserPosts(userId: string) {
+  return await prisma.post.findMany({ where: { userId } });
+}
+
+// Add function to create a log entry in the database
+export async function createLog({ userId, action, details }: {
+  userId?: string,
+  action: string,
+  details?: string
+}) {
+  return await prisma.log.create({
+    data: {
+      userId,
+      action,
+      details,
+      createdAt: new Date()
+    }
+  });
+}
+
+// Add function to fetch logs for a user
+export async function getUserLogs(userId: string) {
+  return await prisma.log.findMany({ where: { userId } });
+}
+
+// Add function to get config value by key
+export async function getConfig(key: string) {
+  return await prisma.config.findUnique({ where: { key } });
+}
+
+// Add function to set/update config value
+export async function setConfig(key: string, value: string) {
+  return await prisma.config.upsert({
+    where: { key },
+    update: { value },
+    create: { key, value }
+  });
+}

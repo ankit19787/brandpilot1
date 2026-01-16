@@ -1,0 +1,70 @@
+// Prisma schema for BrandPilot OS
+// Database: PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  passwordHash String
+  role         String   // 'admin' | 'user'
+  plan         String   @default("free") // 'free' | 'pro' | 'business' | 'enterprise'
+  credits      Int      @default(1000) // AI credits remaining
+  maxCredits   Int      @default(1000) // Max credits per month based on plan
+  createdAt    DateTime @default(now())
+  sessions     Session[]
+  posts        Post[]
+  logs         Log[]
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  token     String   @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+}
+
+model Post {
+  id           String   @id @default(uuid())
+  user         User     @relation(fields: [userId], references: [id])
+  userId       String
+  platform     String   // 'facebook' | 'instagram' | 'twitter'
+  content      String
+  imageUrl     String?
+  status       String   // 'draft' | 'scheduled' | 'published' | 'failed'
+  scheduledFor DateTime?
+  createdAt    DateTime @default(now())
+}
+
+model Token {
+  id        String   @id @default(uuid())
+  type      String   // 'facebook' | 'instagram' | 'twitter'
+  value     String   // encrypted
+  expiresAt DateTime?
+  createdAt DateTime @default(now())
+}
+
+model Log {
+  id        String   @id @default(uuid())
+  user      User?    @relation(fields: [userId], references: [id])
+  userId    String?
+  action    String
+  details   String?
+  createdAt DateTime @default(now())
+}
+
+model Config {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}

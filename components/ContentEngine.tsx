@@ -32,7 +32,7 @@ import {
   Link as LinkIcon
 } from 'lucide-react';
 // Removed non-existent generateYouTubeTranscript export
-import { generatePost, platformAPI, generateImage } from '../services/gemini';
+import { generatePost, platformAPI, generateImage, createPost } from '../services/gemini.client';
 import { BrandDNA, ContentItem } from '../types';
 
 interface ContentEngineProps {
@@ -190,6 +190,22 @@ const ContentEngine: React.FC<ContentEngineProps> = ({
           }, 
           { imageUrl: targetImage || undefined }
         );
+        
+        // Save post to database
+        try {
+          await createPost({
+            userId: 'default_user', // You can replace with actual user ID if you have authentication
+            platform: plt,
+            content: generatedContent,
+            imageUrl: targetImage || undefined,
+            status: 'published',
+            scheduledFor: undefined
+          });
+        } catch (dbError) {
+          console.error('Failed to save post to database:', dbError);
+          // Don't fail the publish if database save fails
+        }
+        
         onAction(`Production Publish Success on ${plt}!`, 'success');
         setPostUrl(response.url);
         resetPreview();
@@ -231,6 +247,20 @@ const ContentEngine: React.FC<ContentEngineProps> = ({
           },
           { imageUrl: targetImage || undefined }
         );
+
+        // Save post to database
+        try {
+          await createPost({
+            userId: 'default_user',
+            platform: plt.name,
+            content: generatedContent,
+            imageUrl: targetImage || undefined,
+            status: 'published',
+            scheduledFor: undefined
+          });
+        } catch (dbError) {
+          console.error('Failed to save post to database:', dbError);
+        }
 
         successCount++;
         setApiLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ✓ ${plt.name} published successfully`]);

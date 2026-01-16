@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Compass, Calendar, Target, Zap, Loader2, ArrowRight } from 'lucide-react';
-import { generateContentStrategy } from '../services/gemini';
+import { generateContentStrategy } from '../services/gemini.client';
 import { BrandDNA, ContentStrategy, ActiveTab } from '../types';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
