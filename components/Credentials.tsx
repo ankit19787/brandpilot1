@@ -11,14 +11,14 @@ import {
   Info, 
   CheckCircle2, 
   AlertCircle,
-  Linkedin,
+  // Linkedin, (removed)
   Twitter,
-  Youtube,
+  // Youtube, (removed)
   Instagram,
   ChevronRight,
   Database,
   RefreshCw,
-  MessageCircle,
+  // MessageCircle, (removed)
   Loader2,
   Facebook,
   Code2,
@@ -60,7 +60,7 @@ const Credentials: React.FC<CredentialsProps> = ({ onAction }) => {
       }
       fetchFacebookToken();
     }, []);
-  const [selectedPlatform, setSelectedPlatform] = useState<string>('linkedin');
+  const [selectedPlatform, setSelectedPlatform] = useState<string>('x');
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
   const [isTesting, setIsTesting] = useState(false);
   const [showApiCollection, setShowApiCollection] = useState(false);
@@ -74,17 +74,7 @@ const Credentials: React.FC<CredentialsProps> = ({ onAction }) => {
   const X_ACCESS_SECRET = import.meta.env.VITE_X_ACCESS_SECRET;
 
   const [platforms, setPlatforms] = useState<PlatformCreds[]>([
-    {
-      id: 'linkedin',
-      name: 'LinkedIn',
-      icon: Linkedin,
-      color: 'text-blue-600',
-      isConfigured: true,
-      fields: [
-        { label: 'Client ID', key: 'li_client_id', value: '78abc123456789', hidden: false },
-        { label: 'Client Secret', key: 'li_client_secret', value: 'sk_live_li_••••••••••••••••', hidden: true },
-      ]
-    },
+    // LinkedIn removed
     {
       id: 'x',
       name: 'X (Twitter)',
@@ -98,6 +88,7 @@ const Credentials: React.FC<CredentialsProps> = ({ onAction }) => {
         { label: 'X Access Secret', key: 'x_access_secret', value: X_ACCESS_SECRET, hidden: true },
       ]
     },
+    // YouTube and WhatsApp removed
     {
       id: 'facebook',
       name: 'Facebook',

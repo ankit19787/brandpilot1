@@ -1,7 +1,11 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { BrandDNA, ContentStrategy } from "../types";
+import { uploadToCloudinary } from "./cloudinaryUpload";
 
 const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY || "" });
+
+// Configurable caption length for Instagram (can be changed per client or .env)
+export const INSTAGRAM_CAPTION_LENGTH = Number(import.meta.env.VITE_INSTAGRAM_CAPTION_LENGTH) || 300;
 
 // All credentials loaded from .env
 const INSTAGRAM_WA_TOKEN = import.meta.env.VITE_INSTAGRAM_WA_TOKEN;
@@ -144,9 +148,11 @@ export const generatePost = async (platform: string, topic: string, dna: BrandDN
     if (!import.meta.env.VITE_API_KEY) {
       throw new Error("API_KEY is not configured. Please add VITE_API_KEY to your .env file.");
     }
+    // For all platforms, request a post/caption of the configured length
+    let prompt = `Generate a ${platform} post about \"${topic}\". DNA: ${JSON.stringify(dna)}\nLimit the post/caption to ${INSTAGRAM_CAPTION_LENGTH} characters or less.`;
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: `Generate a ${platform} post about "${topic}". DNA: ${JSON.stringify(dna)}`,
+      model: 'gemini-3-pro-preview',
+      contents: prompt,
     });
     if (!response.text) {
       console.error("Gemini API response:", response);
@@ -241,9 +247,22 @@ export async function ensureLongLivedFacebookToken(token: string): Promise<strin
     if (!res.ok || !data.access_token) {
       throw new Error(data.error?.message || "Failed to get long-lived Facebook token");
     }
-    // Optionally: update .env automatically (requires backend or user prompt)
-    // For now, just log the new token
-    console.warn("Replace VITE_FACEBOOK_PRODUCTION_TOKEN in your .env with this long-lived token:", data.access_token);
+    // Automatically update .env.local with the new token (with warning)
+    const fs = await import('fs');
+    const envPath = './.env.local';
+    try {
+      let envContent = fs.readFileSync(envPath, 'utf8');
+      const newLine = `VITE_FACEBOOK_PRODUCTION_TOKEN=${data.access_token}`;
+      if (envContent.includes('VITE_FACEBOOK_PRODUCTION_TOKEN=')) {
+        envContent = envContent.replace(/VITE_FACEBOOK_PRODUCTION_TOKEN=.*/g, newLine);
+      } else {
+        envContent += `\n${newLine}`;
+      }
+      fs.writeFileSync(envPath, envContent, 'utf8');
+      console.warn('[SECURITY WARNING] .env.local was automatically updated with a new Facebook long-lived token. Please keep this file secure!');
+    } catch (err) {
+      console.warn('Failed to update .env.local automatically. Please update VITE_FACEBOOK_PRODUCTION_TOKEN manually:', data.access_token);
+    }
     return data.access_token;
   }
   return token;
@@ -325,23 +344,51 @@ export const platformAPI = {
       const apiVersion = FACEBOOK_API_VERSION;
 
       try {
-        if (isInstagram) {
-          onStatus("Step 1: Validating Image URL...");
-          const imageUrl = metadata?.imageUrl;
-          if (!imageUrl) {
-            throw new Error("Instagram posts require an image URL. Please provide a public image URL in 'Public Image URL' field.");
+        // --- Unified logic for Instagram and Facebook image posting ---
+        onStatus("Step 1: Validating Image URL (if provided)...");
+        let imageUrl = metadata?.imageUrl;
+        let isImagePost = !!imageUrl;
+        if (imageUrl) {
+          // If imageUrl is a data/base64 URL, upload to Cloudinary and use the returned public URL
+          if (imageUrl.startsWith('data:')) {
+            onStatus('Uploading image to Cloudinary for public access...');
+            try {
+              imageUrl = await uploadToCloudinary(imageUrl);
+              onStatus('Image uploaded to Cloudinary.');
+            } catch (err: any) {
+              throw new Error('Failed to upload image to Cloudinary: ' + (err.message || err));
+            }
           }
-          // Validate URL format
+          // Validate URL format and ensure it's not a blob URL
           try {
-            new URL(imageUrl);
+            const urlObj = new URL(imageUrl);
+            if (urlObj.protocol !== 'http:' && urlObj.protocol !== 'https:') {
+              throw new Error();
+            }
+            if (imageUrl.startsWith('blob:')) {
+              throw new Error('Image URL cannot be a blob URL. Please provide a public HTTP/HTTPS image URL.');
+            }
           } catch (e) {
-            throw new Error(`Invalid image URL format: ${imageUrl}. Must be a valid HTTP/HTTPS URL.`);
+            if (typeof e === 'string' && e.includes('blob')) {
+              throw new Error(e);
+            }
+            throw new Error(`Invalid image URL format: ${imageUrl}. Must be a valid HTTP/HTTPS URL and not a blob URL.`);
           }
+        }
+
+        // Instagram: image post required, Facebook: image optional
+        if (isInstagram && !imageUrl) {
+          throw new Error("Instagram posts require an image URL. Please provide a public image URL in 'Public Image URL' field.");
+        }
+
+        // Enforce caption/content length for all platforms
+        const caption = content.length > INSTAGRAM_CAPTION_LENGTH ? content.slice(0, INSTAGRAM_CAPTION_LENGTH) : content;
+
+        if (isInstagram) {
           onStatus("Step 2: Creating Instagram Media Container...");
-          // Build form data exactly as Instagram expects
           const formData = new FormData();
           formData.append('image_url', imageUrl);
-          formData.append('caption', content);
+          formData.append('caption', caption);
           formData.append('media_type', 'IMAGE');
           formData.append('access_token', token);
           onStatus(`Sending request with image: ${imageUrl}`);
@@ -383,14 +430,30 @@ export const platformAPI = {
           onStatus(`Published successfully to Instagram!`);
           return { status: 201, id: data2.id, url: `instagram.com/p/${data2.id}` };
         } else {
-          onStatus("Publishing to Facebook Page...");
-          const res = await fetch(`${apiUrl}/${apiVersion}/${id}/feed`, {
-            method: 'POST',
-            body: new URLSearchParams({ message: content, access_token: token })
-          });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error?.message || "FB Error");
-          return { status: 201, id: data.id, url: `facebook.com/${data.id}` };
+          if (isImagePost) {
+            onStatus("Step 2: Publishing image post to Facebook Page...");
+            // Facebook photo endpoint: /{page-id}/photos
+            const formData = new FormData();
+            formData.append('url', imageUrl);
+            formData.append('caption', caption);
+            formData.append('access_token', token);
+            const res = await fetch(`${apiUrl}/${apiVersion}/${id}/photos`, {
+              method: 'POST',
+              body: formData
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error?.message || "FB Photo Error");
+            return { status: 201, id: data.id, url: `facebook.com/${data.id}` };
+          } else {
+            onStatus("Publishing text post to Facebook Page...");
+            const res = await fetch(`${apiUrl}/${apiVersion}/${id}/feed`, {
+              method: 'POST',
+              body: new URLSearchParams({ message: caption, access_token: token })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error?.message || "FB Error");
+            return { status: 201, id: data.id, url: `facebook.com/${data.id}` };
+          }
         }
       } catch (err: any) {
         onStatus(`Meta Gateway Error: ${err.message}`);

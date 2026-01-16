@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
@@ -10,6 +9,7 @@ import PerformanceBrain from './components/PerformanceBrain';
 import Monetization from './components/Monetization';
 import Connections from './components/Connections';
 import Credentials from './components/Credentials';
+import Documentation from './components/Documentation';
 import { ActiveTab, BrandDNA as BrandDNAType, ContentItem, SAMPLE_SCHEDULED_POSTS } from './types';
 import { Sparkles, Bell, Search, X, CheckCircle, Zap } from 'lucide-react';
 import { publishToPlatform } from './services/gemini';
@@ -117,6 +117,8 @@ const App: React.FC = () => {
       case 'credentials': return <Credentials onAction={addToast} />;
       case 'performance': return <PerformanceBrain onNavigate={navigateWithTopic} />;
       case 'monetization': return <Monetization dna={dna} onAction={addToast} />;
+      case 'documentation':
+          return <Documentation />;
       default: return <Dashboard onNavigate={navigateWithTopic} hasDNA={!!dna} />;
     }
   };

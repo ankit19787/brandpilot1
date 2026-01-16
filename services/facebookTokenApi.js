@@ -2,10 +2,13 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
-const dotenvPath = path.join(process.cwd(), '.env');
+const envLocalPath = path.join(process.cwd(), '.env.local');
+const envPath = path.join(process.cwd(), '.env');
+const dotenvPath = fs.existsSync(envLocalPath) ? envLocalPath : envPath;
 const router = express.Router();
 
 // GET /api/facebook-token - returns current Facebook token
+// NOTE: This API should be accessed via the backend server (default port 3001), not the frontend (3000).
 router.get('/facebook-token', (req, res) => {
   // Always read the latest token from .env file
   try {

@@ -14,9 +14,9 @@ import {
   X as CloseIcon, 
   Check, 
   Globe,
-  Linkedin,
+  // Linkedin, (removed)
   Twitter,
-  Youtube,
+  // Youtube, (removed)
   Instagram,
   Terminal,
   MessageCircle,
@@ -52,8 +52,11 @@ const ContentEngine: React.FC<ContentEngineProps> = ({
   autoPostEnabled,
   onToggleAutoPost
 }) => {
-  const [platform, setPlatform] = useState('LinkedIn');
-  const [whatsappType, setWhatsappType] = useState<'Broadcast' | 'Status'>('Broadcast');
+  // Multi-select platform state
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(['Instagram']);
+  // For backward compatibility, keep single platform for now
+  const [platform, setPlatform] = useState('Instagram');
+  // const [whatsappType, setWhatsappType] = useState<'Broadcast' | 'Status'>('Broadcast'); // removed
   const [topic, setTopic] = useState(initialTopic);
   const [ytTitle, setYtTitle] = useState('');
   const [generatedContent, setGeneratedContent] = useState('');
@@ -77,8 +80,8 @@ const ContentEngine: React.FC<ContentEngineProps> = ({
   const [scheduleDate, setScheduleDate] = useState(new Date().toISOString().split('T')[0]);
   const [scheduleTime, setScheduleTime] = useState('09:00');
 
-  const connectedPlatforms = ['LinkedIn', 'X (Twitter)', 'YouTube Script', 'Instagram', 'WhatsApp', 'Facebook'];
-  const visualPlatforms = ['Instagram', 'Facebook', 'LinkedIn'];
+  const connectedPlatforms = ['X (Twitter)', 'Instagram', 'Facebook'];
+  const visualPlatforms = ['Instagram', 'Facebook'];
 
   useEffect(() => {
     if (initialTopic) {
@@ -98,20 +101,21 @@ const ContentEngine: React.FC<ContentEngineProps> = ({
 
   const handleGenerate = async () => {
     if (!topic && !isManualMode) return;
-    
+
     setLoading(true);
     resetPreview();
 
     const activeDna = dna || { voice: 'Professional', personality: [], contentPillars: [], audienceType: '', writingStyle: '' };
 
     try {
-      // 1. Narrative Synthesis (Priority 1)
-      const textResult = await generatePost(platform, topic, activeDna);
+      // Use first selected platform for content generation
+      const mainPlatform = selectedPlatforms[0] || platform;
+      const textResult = await generatePost(mainPlatform, topic, activeDna);
       setGeneratedContent(textResult);
       setLoading(false); // Text is ready, UI is interactive
 
-      // 2. Visual Synthesis (Priority 2 - Background) - Only if no manual URL provided
-      if (visualPlatforms.includes(platform) && !manualImageUrl) {
+      // 2. Visual Synthesis (Priority 2 - Background) - Only if no manual URL provided and no image already generated
+      if (visualPlatforms.includes(mainPlatform) && !manualImageUrl && !generatedImageUrl) {
         setGeneratingVisuals(true);
         try {
           const imageResult = await generateImage(topic, activeDna);
@@ -122,7 +126,6 @@ const ContentEngine: React.FC<ContentEngineProps> = ({
           setGeneratingVisuals(false);
         }
       }
-
       onAction('Narrative ready. Visuals finalizing...', 'success');
     } catch (error) {
       console.error(error);
@@ -166,33 +169,36 @@ const ContentEngine: React.FC<ContentEngineProps> = ({
       return;
     }
 
-    if (!connectedPlatforms.includes(platform)) {
-      onAction(`Gateway for ${platform} is not authorized.`);
-      return;
-    }
+    // Use selected platforms for posting
+    const platformsToPost = selectedPlatforms.length > 0 ? selectedPlatforms : [platform];
+    for (const plt of platformsToPost) {
+      if (!connectedPlatforms.includes(plt)) {
+        onAction(`Gateway for ${plt} is not authorized.`);
+        continue;
+      }
 
-    setPublishing(true);
-    setApiLogs([]);
-    try {
-      const targetImage = getTargetImage();
-      const response = await platformAPI.publish(
-        platform, 
-        generatedContent, 
-        (status) => {
-          setPublishStatus(status);
-          setApiLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${status}`]);
-        }, 
-        { imageUrl: targetImage || undefined }
-      );
-      
-      onAction(`Production Publish Success!`, 'success');
-      setPostUrl(response.url);
-      resetPreview();
-      setTopic('');
-    } catch (error: any) {
-      onAction(error.message || `API Gateway Timeout.`);
-    } finally {
-      setPublishing(false);
+      setPublishing(true);
+      setApiLogs([]);
+      try {
+        const targetImage = getTargetImage();
+        const response = await platformAPI.publish(
+          plt, 
+          generatedContent, 
+          (status) => {
+            setPublishStatus(status);
+            setApiLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${status}`]);
+          }, 
+          { imageUrl: targetImage || undefined }
+        );
+        onAction(`Production Publish Success on ${plt}!`, 'success');
+        setPostUrl(response.url);
+        resetPreview();
+        setTopic('');
+      } catch (error: any) {
+        onAction(error.message || `API Gateway Timeout.`);
+      } finally {
+        setPublishing(false);
+      }
     }
   };
 
@@ -262,17 +268,20 @@ const ContentEngine: React.FC<ContentEngineProps> = ({
       });
       onAction(`Posts scheduled for ${platformsToSchedule.length} platforms at ${scheduleTime}`, 'success');
     } else {
-      // Schedule for single platform
-      onSchedulePost({
-        id: Math.random().toString(36).substr(2, 9),
-        platform,
-        content: generatedContent,
-        imageUrl: getTargetImage() || undefined,
-        status: 'Scheduled',
-        scheduledFor: scheduledAt,
-        createdAt: new Date().toISOString()
+      // Schedule for selected platforms
+      const platformsToSchedule = selectedPlatforms.length > 0 ? selectedPlatforms : [platform];
+      platformsToSchedule.forEach(plt => {
+        onSchedulePost({
+          id: Math.random().toString(36).substr(2, 9),
+          platform: plt,
+          content: generatedContent,
+          imageUrl: getTargetImage() || undefined,
+          status: 'Scheduled',
+          scheduledFor: scheduledAt,
+          createdAt: new Date().toISOString()
+        });
       });
-      onAction(`Post queued for ${scheduleTime}`, 'success');
+      onAction(`Post queued for ${platformsToSchedule.length} platform(s) at ${scheduleTime}`, 'success');
     }
     
     resetPreview();
@@ -280,11 +289,11 @@ const ContentEngine: React.FC<ContentEngineProps> = ({
   };
 
   const platformsList = [
-    { name: 'LinkedIn', icon: Linkedin, color: 'text-blue-600' },
+    // { name: 'LinkedIn', icon: Linkedin, color: 'text-blue-600' },
     { name: 'X (Twitter)', icon: Twitter, color: 'text-sky-500' },
-    { name: 'YouTube Script', icon: Youtube, color: 'text-red-600' },
+    // { name: 'YouTube Script', icon: Youtube, color: 'text-red-600' },
     { name: 'Instagram', icon: Instagram, color: 'text-pink-600' },
-    { name: 'WhatsApp', icon: MessageCircle, color: 'text-emerald-600' },
+    // { name: 'WhatsApp', icon: MessageCircle, color: 'text-emerald-600' },
     { name: 'Facebook', icon: Facebook, color: 'text-blue-700' },
   ];
 
@@ -328,22 +337,39 @@ const ContentEngine: React.FC<ContentEngineProps> = ({
         <div className="space-y-6">
           <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm space-y-8">
             <div>
-              <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-4">Select Target API</label>
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-4">Select Target Platforms</label>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {platformsList.map((p) => {
                   const Icon = p.icon;
-                  const isSelected = platform === p.name;
+                  const isSelected = selectedPlatforms.includes(p.name);
                   return (
                     <button
                       key={p.name}
+                      type="button"
                       disabled={loading || publishing || postToAllPlatforms}
-                      onClick={() => setPlatform(p.name)}
+                      onClick={() => {
+                        if (postToAllPlatforms) return;
+                        setSelectedPlatforms((prev) =>
+                          prev.includes(p.name)
+                            ? prev.filter((name) => name !== p.name)
+                            : [...prev, p.name]
+                        );
+                        setPlatform(p.name); // for backward compatibility
+                      }}
                       className={`px-3 py-4 rounded-xl border font-bold text-xs transition-all flex items-center gap-2 relative ${
                         isSelected 
                           ? 'bg-slate-900 text-white border-slate-900 shadow-md' 
                           : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
                       } ${postToAllPlatforms ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        readOnly
+                        className="mr-2 accent-indigo-600"
+                        tabIndex={-1}
+                        style={{ pointerEvents: 'none' }}
+                      />
                       <Icon size={16} className={isSelected ? 'text-white' : p.color} />
                       <span className="truncate">{p.name}</span>
                     </button>

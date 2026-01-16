@@ -11,7 +11,8 @@ import {
   Sparkles,
   Calendar,
   Link2,
-  Key
+  Key,
+  Info
 } from 'lucide-react';
 import { ActiveTab } from '../types';
 
@@ -32,6 +33,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onAction }) 
     { id: 'credentials', label: 'API Credentials', icon: Key },
     { id: 'performance', label: 'Performance', icon: BarChart3 },
     { id: 'monetization', label: 'Monetization', icon: Coins },
+    { id: 'documentation', label: 'Documentation', icon: Info },
   ];
 
   return (
