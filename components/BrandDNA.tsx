@@ -1,0 +1,163 @@
+
+import React, { useState } from 'react';
+import { Fingerprint, Loader2, Sparkles, CheckCircle2, MessageSquare, Play, GraduationCap } from 'lucide-react';
+import { analyzeBrandDNA } from '../services/gemini';
+import { BrandDNA as BrandDNAType, SAMPLE_DNA, TUTORING_TIK_DNA } from '../types';
+
+interface BrandDNAProps {
+  dna: BrandDNAType | null;
+  setDna: (dna: BrandDNAType) => void;
+}
+
+const BrandDNA: React.FC<BrandDNAProps> = ({ dna, setDna }) => {
+  const [loading, setLoading] = useState(false);
+  const [input, setInput] = useState('');
+
+  const handleAnalyze = async () => {
+    if (!input) return;
+    setLoading(true);
+    try {
+      const result = await analyzeBrandDNA(input);
+      setDna(result);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadSample = (type: 'tech' | 'tutoring') => {
+    setLoading(true);
+    setTimeout(() => {
+      setDna(type === 'tech' ? SAMPLE_DNA : TUTORING_TIK_DNA);
+      setLoading(false);
+    }, 1000);
+  };
+
+  return (
+    <div className="p-8 max-w-5xl mx-auto space-y-8 animate-in slide-in-from-bottom-4 duration-500">
+      <div className="flex items-center gap-4 mb-8">
+        <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center">
+          <Fingerprint size={28} />
+        </div>
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">Brand Intelligence Engine</h1>
+          <p className="text-slate-500">Define your unique Brand DNA to power the rest of the OS.</p>
+        </div>
+      </div>
+
+      {!dna ? (
+        <div className="bg-white p-10 rounded-[2.5rem] border border-slate-200 shadow-sm text-center">
+          <div className="max-w-xl mx-auto space-y-8">
+            <div className="space-y-3">
+              <h2 className="text-2xl font-bold text-slate-900">Select or Analyze a Voice</h2>
+              <p className="text-slate-500">Paste your top-performing posts or try a demo brand to see how BrandPilot works.</p>
+            </div>
+            
+            <div className="flex flex-col gap-4">
+              <textarea
+                className="w-full h-48 p-5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all resize-none text-slate-700 text-sm font-medium leading-relaxed"
+                placeholder="Paste your past social media posts here to analyze your voice..."
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+              />
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <button
+                  onClick={handleAnalyze}
+                  disabled={loading || !input}
+                  className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-bold flex items-center justify-center gap-3 disabled:opacity-50 hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-500/20 active:scale-[0.98]"
+                >
+                  {loading && !dna ? <Loader2 className="animate-spin" size={20} /> : <Sparkles size={20} />}
+                  Analyze Custom Voice
+                </button>
+                
+                <div className="flex flex-col gap-2">
+                   <button
+                    onClick={() => loadSample('tutoring')}
+                    disabled={loading}
+                    className="w-full py-4 bg-white text-indigo-600 border-2 border-indigo-100 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-indigo-50 transition-all active:scale-[0.98]"
+                  >
+                    <GraduationCap size={18} />
+                    Try TutoringTik Voice
+                  </button>
+                  <button
+                    onClick={() => loadSample('tech')}
+                    disabled={loading}
+                    className="w-full py-2 bg-slate-50 text-slate-400 border border-slate-200 rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-slate-100 transition-all"
+                  >
+                    <Play size={12} fill="currentColor" />
+                    Try Tech Founder Sample
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+            <h2 className="text-xl font-bold flex items-center gap-2">
+              <CheckCircle2 className="text-emerald-500" />
+              Brand Identity
+            </h2>
+            <div className="space-y-6">
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Voice & Tone</label>
+                <p className="text-lg text-slate-800 font-semibold leading-snug">{dna.voice}</p>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Writing Style</label>
+                <p className="text-slate-600 leading-relaxed font-medium">{dna.writingStyle}</p>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 block">Personality Traits</label>
+                <div className="flex flex-wrap gap-2">
+                  {dna.personality.map((trait, i) => (
+                    <span key={i} className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-bold border border-indigo-100 uppercase tracking-tight">
+                      {trait}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+            <h2 className="text-xl font-bold flex items-center gap-2">
+              <MessageSquare className="text-indigo-500" />
+              Content Strategy DNA
+            </h2>
+            <div className="space-y-6">
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Primary Audience</label>
+                <p className="text-lg text-slate-800 font-semibold leading-snug">{dna.audienceType}</p>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 block">Core Pillars</label>
+                <ul className="space-y-3">
+                  {dna.contentPillars.map((pillar, i) => (
+                    <li key={i} className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100 text-slate-700 font-semibold hover:border-indigo-200 transition-colors">
+                      <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.4)]" />
+                      {pillar}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+            <div className="pt-4">
+              <button 
+                onClick={() => setDna(null as any)}
+                className="text-slate-400 text-xs font-bold hover:text-rose-500 transition-colors flex items-center gap-2"
+              >
+                Reset Brand Intelligence
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default BrandDNA;
