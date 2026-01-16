@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+
+const BACKEND_API_URL = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:3001';
 import { 
   Key, 
   ShieldCheck, 
@@ -43,7 +45,7 @@ const Credentials: React.FC<CredentialsProps> = ({ onAction }) => {
     React.useEffect(() => {
       async function fetchFacebookToken() {
         try {
-          const res = await fetch('http://localhost:3001/api/facebook-token');
+          const res = await fetch(`${BACKEND_API_URL}/api/facebook-token`);
           const data = await res.json();
           if (data.token) {
             setPlatforms(prev => prev.map(p =>
@@ -64,14 +66,12 @@ const Credentials: React.FC<CredentialsProps> = ({ onAction }) => {
   const [showApiCollection, setShowApiCollection] = useState(false);
 
   // Production Meta Access Tokens (Verified)
-  const PRODUCTION_META_TOKEN = "EAAM3MBgT7s4BQUqEw1CvKXxMZAkN2JVeiA3I36TrW9Ny0zWpNlFsEFSOeqeu93sCnKZC7c80NXyZBjekpcNaE0xTWJ10fAZCi3cXvnyVl9bmhJxl6ZB3iRiyhjHTkjDa777JNS3HwdaHUdYSFBZCkPw6TQaR9WWZAgVs47OSqT8t8rCwcgXrwIZAg09YewiI1shYYwZDZD";
-  const FACEBOOK_SPECIFIC_TOKEN = "EAAM3MBgT7s4BQY0CYnMfvqZBNA5NpQCOzGvwRIHOVyFGeld1XIOlRR7cAZCEHn6VCOWr7XZC65nZA1jyOhT7zQd6fUSK0a8m6q88Pd33yp8RrhsPEMDiSiBNzZAhyP9SaO0FthnbYZARQPm19y8guZCSuz4TaEeKqkQnHS2rBpxnhVzzpCdFKQLvmKbIHP9gEh18uQwSfx8BksubSZBtPGt61ZAZAiSEkRiqJCIWppAT2u0eEZD";
-
-  // Verified User Production Keys for X (Twitter)
-  const X_API_KEY = "paL3PcGuHlOzelopy3D1wLAIj";
-  const X_API_SECRET = "PqH5hn2x3W1gCOYCV1JbkHi9sqDDlj8OtkPd6X7Y82ZpvYSRf3";
-  const X_ACCESS_TOKEN = "1995694849396502528-6W6Scf6DRs8OO79KzWcWwF5A8JVKYk";
-  const X_ACCESS_SECRET = "7OxBpfVNOsn7wVwGSqnDgxiZsDFGJngrpSFs9mNgsb5d7";
+  const PRODUCTION_META_TOKEN = import.meta.env.VITE_INSTAGRAM_WA_TOKEN;
+  const FACEBOOK_SPECIFIC_TOKEN = import.meta.env.VITE_FACEBOOK_PRODUCTION_TOKEN;
+  const X_API_KEY = import.meta.env.VITE_X_API_KEY;
+  const X_API_SECRET = import.meta.env.VITE_X_API_SECRET;
+  const X_ACCESS_TOKEN = import.meta.env.VITE_X_ACCESS_TOKEN;
+  const X_ACCESS_SECRET = import.meta.env.VITE_X_ACCESS_SECRET;
 
   const [platforms, setPlatforms] = useState<PlatformCreds[]>([
     {
@@ -161,7 +161,7 @@ const generateSignature = async (params) => {
     const newToken = prompt('Enter new Facebook token:');
     if (!newToken) return;
     try {
-      const res = await fetch('http://localhost:3001/api/update-facebook-token', {
+      const res = await fetch(`${BACKEND_API_URL}/api/update-facebook-token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ newToken })
@@ -169,7 +169,7 @@ const generateSignature = async (params) => {
       const data = await res.json();
       if (data.success) {
         // Fetch latest token from backend
-        const tokenRes = await fetch('http://localhost:3001/api/facebook-token');
+        const tokenRes = await fetch(`${BACKEND_API_URL}/api/facebook-token`);
         const tokenData = await tokenRes.json();
         // Update local state for Facebook token
         setPlatforms(prev => prev.map(p =>
