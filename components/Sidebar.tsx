@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { 
   LayoutDashboard, 
@@ -20,9 +19,10 @@ interface SidebarProps {
   activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
   onAction: (msg: string) => void;
+  handleLogout: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onAction }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onAction, handleLogout }) => {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'dna', label: 'Brand DNA', icon: Fingerprint },
@@ -87,6 +87,13 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onAction }) 
         >
           <Settings size={20} />
           Settings
+        </button>
+
+        <button 
+          onClick={handleLogout}
+          className="w-full mt-4 flex items-center gap-3 px-4 py-3 rounded-xl text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition-all font-medium"
+        >
+          Logout
         </button>
       </div>
     </div>

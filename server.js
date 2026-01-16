@@ -4,6 +4,7 @@ import bodyParser from 'body-parser';
 import cors from 'cors';
 import facebookTokenApi from './services/facebookTokenApi.js';
 import twitterProxyApi from './services/twitterProxyApi.js';
+import authApi from './services/authApi.js';
 
 // Load environment variables from .env.local or .env (whichever exists)
 import fs from 'fs';
@@ -15,6 +16,7 @@ app.use(bodyParser.json());
 
 app.use('/api', facebookTokenApi);
 app.use('/api', twitterProxyApi);
+app.use('/api', authApi);
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
