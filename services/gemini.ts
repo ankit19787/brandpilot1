@@ -247,22 +247,8 @@ export async function ensureLongLivedFacebookToken(token: string): Promise<strin
     if (!res.ok || !data.access_token) {
       throw new Error(data.error?.message || "Failed to get long-lived Facebook token");
     }
-    // Automatically update .env.local with the new token (with warning)
-    const fs = await import('fs');
-    const envPath = './.env.local';
-    try {
-      let envContent = fs.readFileSync(envPath, 'utf8');
-      const newLine = `VITE_FACEBOOK_PRODUCTION_TOKEN=${data.access_token}`;
-      if (envContent.includes('VITE_FACEBOOK_PRODUCTION_TOKEN=')) {
-        envContent = envContent.replace(/VITE_FACEBOOK_PRODUCTION_TOKEN=.*/g, newLine);
-      } else {
-        envContent += `\n${newLine}`;
-      }
-      fs.writeFileSync(envPath, envContent, 'utf8');
-      console.warn('[SECURITY WARNING] .env.local was automatically updated with a new Facebook long-lived token. Please keep this file secure!');
-    } catch (err) {
-      console.warn('Failed to update .env.local automatically. Please update VITE_FACEBOOK_PRODUCTION_TOKEN manually:', data.access_token);
-    }
+    // In production (Vercel), you must update the environment variable manually
+    console.warn('[ACTION REQUIRED] New Facebook long-lived token generated. Please update VITE_FACEBOOK_PRODUCTION_TOKEN in your Vercel dashboard:', data.access_token);
     return data.access_token;
   }
   return token;
