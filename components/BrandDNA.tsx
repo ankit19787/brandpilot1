@@ -2,23 +2,43 @@
 import React, { useState } from 'react';
 import { Fingerprint, Loader2, Sparkles, CheckCircle2, MessageSquare, Play, GraduationCap } from 'lucide-react';
 import { analyzeBrandDNA } from '../services/gemini.client';
+import { deductCredits } from '../services/creditService';
+import { canUseFeature, CREDIT_COSTS } from '../services/planService';
 import { BrandDNA as BrandDNAType, SAMPLE_DNA, TUTORING_TIK_DNA } from '../types';
+import FeatureGate from './FeatureGate';
+import CreditsWarning from './CreditsWarning';
 
 interface BrandDNAProps {
   dna: BrandDNAType | null;
   setDna: (dna: BrandDNAType) => void;
+  userPlan?: { plan: string; credits: number; maxCredits: number };
+  onUpgrade: () => void;
+  onCreditsUpdate: (newCredits: number) => void;
 }
 
-const BrandDNA: React.FC<BrandDNAProps> = ({ dna, setDna }) => {
+const BrandDNA: React.FC<BrandDNAProps> = ({ dna, setDna, userPlan = { plan: 'free', credits: 0, maxCredits: 1000 }, onUpgrade, onCreditsUpdate }) => {
   const [loading, setLoading] = useState(false);
   const [input, setInput] = useState('');
+  
+  const isLocked = !canUseFeature(userPlan.plan, 'brandDNA');
+  const hasEnoughCredits = userPlan.credits >= CREDIT_COSTS.brandDNAAnalysis;
 
   const handleAnalyze = async () => {
-    if (!input) return;
+    if (!input || isLocked) return;
+    
+    if (!hasEnoughCredits) {
+      onUpgrade();
+      return;
+    }
+    
     setLoading(true);
     try {
-      const result = await analyzeBrandDNA(input);
-      setDna(result);
+      // Deduct credits first
+      const result = await deductCredits('default_user', CREDIT_COSTS.brandDNAAnalysis, 'Brand DNA Analysis');
+      onCreditsUpdate(result.credits);
+      
+      const dnaResult = await analyzeBrandDNA(input);
+      setDna(dnaResult);
     } catch (error) {
       console.error(error);
     } finally {
@@ -35,18 +55,31 @@ const BrandDNA: React.FC<BrandDNAProps> = ({ dna, setDna }) => {
   };
 
   return (
-    <div className="p-8 max-w-5xl mx-auto space-y-8 animate-in slide-in-from-bottom-4 duration-500">
-      <div className="flex items-center gap-4 mb-8">
-        <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center">
-          <Fingerprint size={28} />
+    <FeatureGate
+      isLocked={isLocked}
+      requiredPlan="pro"
+      featureName="Brand DNA Analysis"
+      onUpgrade={onUpgrade}
+    >
+      <div className="p-8 max-w-5xl mx-auto space-y-8 animate-in slide-in-from-bottom-4 duration-500">
+        <div className="flex items-center gap-4 mb-8">
+          <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center">
+            <Fingerprint size={28} />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900">Brand Intelligence Engine</h1>
+            <p className="text-slate-500">Define your unique Brand DNA to power the rest of the OS.</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">Brand Intelligence Engine</h1>
-          <p className="text-slate-500">Define your unique Brand DNA to power the rest of the OS.</p>
-        </div>
-      </div>
 
-      {!dna ? (
+        <CreditsWarning
+          currentCredits={userPlan.credits}
+          requiredCredits={CREDIT_COSTS.brandDNAAnalysis}
+          action="analyze your brand DNA"
+          onUpgrade={onUpgrade}
+        />
+
+        {!dna ? (
         <div className="bg-white p-10 rounded-[2.5rem] border border-slate-200 shadow-sm text-center">
           <div className="max-w-xl mx-auto space-y-8">
             <div className="space-y-3">
@@ -157,6 +190,7 @@ const BrandDNA: React.FC<BrandDNAProps> = ({ dna, setDna }) => {
         </div>
       )}
     </div>
+    </FeatureGate>
   );
 };
 

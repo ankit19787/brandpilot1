@@ -2,30 +2,49 @@
 import React, { useState, useEffect } from 'react';
 import { Coins, Target, ArrowUpRight, Loader2, Sparkles, DollarSign } from 'lucide-react';
 import { getMonetizationPlan } from '../services/gemini.client';
+import { deductCredits } from '../services/creditService';
+import { canUseFeature, CREDIT_COSTS } from '../services/planService';
 import { BrandDNA, MonetizationIdea } from '../types';
+import FeatureGate from './FeatureGate';
+import CreditsWarning from './CreditsWarning';
 
 interface MonetizationProps {
   dna: BrandDNA | null;
   onAction: (msg: string, type?: 'success' | 'info') => void;
+  userPlan?: { plan: string; credits: number; maxCredits: number };
+  onUpgrade: () => void;
+  onCreditsUpdate: (newCredits: number) => void;
 }
 
-const Monetization: React.FC<MonetizationProps> = ({ dna, onAction }) => {
+const Monetization: React.FC<MonetizationProps> = ({ dna, onAction, userPlan = { plan: 'free', credits: 0, maxCredits: 1000 }, onUpgrade, onCreditsUpdate }) => {
   const [plans, setPlans] = useState<MonetizationIdea[]>([]);
   const [loading, setLoading] = useState(false);
+  
+  const isLocked = !canUseFeature(userPlan.plan, 'monetization');
+  const hasEnoughCredits = userPlan.credits >= CREDIT_COSTS.monetizationPlan;
 
   useEffect(() => {
-    if (dna && plans.length === 0) {
+    if (dna && plans.length === 0 && !isLocked) {
       handleFetchPlans();
     }
   }, [dna]);
 
   const handleFetchPlans = async () => {
-    if (!dna) return;
+    if (!dna || isLocked) return;
+    
+    if (!hasEnoughCredits) {
+      onUpgrade();
+      return;
+    }
+    
     setLoading(true);
     try {
+      const result = await deductCredits('default_user', CREDIT_COSTS.monetizationPlan, 'Monetization Plan');
+      onCreditsUpdate(result.credits);
+      
       const metrics = { currentFollowers: 25000, engagement: 4.8 };
-      const result = await getMonetizationPlan(dna, metrics);
-      setPlans(result);
+      const planResult = await getMonetizationPlan(dna, metrics);
+      setPlans(planResult);
     } catch (error) {
       console.error(error);
       onAction('Failed to fetch monetization plans.');
@@ -47,26 +66,40 @@ const Monetization: React.FC<MonetizationProps> = ({ dna, onAction }) => {
   }
 
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500">
-      <div className="flex justify-between items-start">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center">
-            <Coins size={28} />
+    <FeatureGate
+      isLocked={isLocked}
+      requiredPlan="pro"
+      featureName="Monetization Planner"
+      onUpgrade={onUpgrade}
+    >
+      <div className="p-8 max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500">
+        <div className="flex justify-between items-start">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center">
+              <Coins size={28} />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-slate-900">Monetization Planner</h1>
+              <p className="text-slate-500">Strategic funnels based on your current audience maturity.</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-3xl font-bold text-slate-900">Monetization Planner</h1>
-            <p className="text-slate-500">Strategic funnels based on your current audience maturity.</p>
-          </div>
+          <button 
+            onClick={handleFetchPlans}
+            disabled={loading || isLocked || !hasEnoughCredits}
+            className="flex items-center gap-2 text-indigo-600 font-bold hover:bg-indigo-50 px-4 py-2 rounded-xl transition-all disabled:opacity-50"
+          >
+            <Sparkles size={18} /> Regenerate Plan
+          </button>
         </div>
-        <button 
-          onClick={handleFetchPlans}
-          className="flex items-center gap-2 text-indigo-600 font-bold hover:bg-indigo-50 px-4 py-2 rounded-xl transition-all"
-        >
-          <Sparkles size={18} /> Regenerate Plan
-        </button>
-      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <CreditsWarning
+          currentCredits={userPlan.credits}
+          requiredCredits={CREDIT_COSTS.monetizationPlan}
+          action="generate monetization plans"
+          onUpgrade={onUpgrade}
+        />
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white p-6 rounded-2xl border border-slate-200 flex items-center gap-4 shadow-sm">
           <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
             <DollarSign />
@@ -155,6 +188,7 @@ const Monetization: React.FC<MonetizationProps> = ({ dna, onAction }) => {
         </div>
       </div>
     </div>
+    </FeatureGate>
   );
 };
 

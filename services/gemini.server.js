@@ -220,6 +220,73 @@ export async function publishToPlatform(platform, content, metadata) {
   const creds = await getAllCredentials();
   const platformConfig = await getPlatformConfig();
   
+  // Handle Twitter/X
+  if (platform === 'X (Twitter)' || platform === 'Twitter' || platform.toLowerCase().includes('twitter') || platform.toLowerCase().includes('x (')) {
+    console.log('[publishToPlatform] Handling Twitter/X post');
+    console.log('[publishToPlatform] Content:', content);
+    
+    if (!creds.x_api_key || !creds.x_api_secret || !creds.x_access_token || !creds.x_access_secret) {
+      throw new Error('Twitter credentials not configured in database');
+    }
+
+    console.log('[publishToPlatform] Credentials found:', {
+      apiKey: creds.x_api_key?.substring(0, 10) + '...',
+      accessToken: creds.x_access_token?.substring(0, 10) + '...'
+    });
+
+    const twitterApiUrl = platformConfig.twitterApiUrl || 'https://api.twitter.com';
+    const url = `${twitterApiUrl}/2/tweets`;
+    console.log('[publishToPlatform] Twitter API URL:', url);
+
+    // Generate OAuth 1.0a signature (server-side)
+    const crypto = await import('crypto');
+    const nonce = crypto.randomBytes(16).toString('hex');
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+
+    const oauthParams = {
+      oauth_consumer_key: creds.x_api_key,
+      oauth_token: creds.x_access_token,
+      oauth_nonce: nonce,
+      oauth_timestamp: timestamp,
+      oauth_signature_method: 'HMAC-SHA1',
+      oauth_version: '1.0',
+    };
+
+    // Generate signature
+    const rfc3986Encode = (str) => encodeURIComponent(str).replace(/[!*'()]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+    const paramString = Object.keys(oauthParams).sort().map(k => `${rfc3986Encode(k)}=${rfc3986Encode(oauthParams[k])}`).join('&');
+    const baseString = `POST&${rfc3986Encode(url)}&${rfc3986Encode(paramString)}`;
+    const signingKey = `${rfc3986Encode(creds.x_api_secret)}&${rfc3986Encode(creds.x_access_secret)}`;
+    const signature = crypto.createHmac('sha1', signingKey).update(baseString).digest('base64');
+    oauthParams.oauth_signature = signature;
+
+    const authHeader = 'OAuth ' + Object.keys(oauthParams).sort().map(k => `${rfc3986Encode(k)}="${rfc3986Encode(oauthParams[k])}"`).join(', ');
+    console.log('[publishToPlatform] Auth header:', authHeader.substring(0, 150) + '...');
+
+    // Post to Twitter
+    console.log('[publishToPlatform] Sending request to Twitter...');
+    const twitterRes = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': authHeader,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ text: content })
+    });
+
+    console.log('[publishToPlatform] Response status:', twitterRes.status);
+    const data = await twitterRes.json();
+    console.log('[publishToPlatform] Response data:', JSON.stringify(data, null, 2));
+    
+    if (!twitterRes.ok) {
+      console.error('Twitter API Error:', data);
+      throw new Error(data.detail || data.title || data.error?.message || `Twitter API Error: ${twitterRes.status}`);
+    }
+
+    console.log('[publishToPlatform] Twitter post successful:', data.data?.id);
+    return { status: 201, id: data.data.id, url: `https://x.com/i/web/status/${data.data.id}` };
+  }
+  
   if (platform === 'Instagram' || platform === 'Facebook') {
     const isInstagram = platform === 'Instagram';
     let token;

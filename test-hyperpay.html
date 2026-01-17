@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HyperPay Widget Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        button {
+            background: #4F46E5;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+        button:hover {
+            background: #4338CA;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        #payment-form-container {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 8px;
+            display: none;
+        }
+        #payment-form-container.active {
+            display: block;
+        }
+        .paymentWidgets {
+            display: block !important;
+            width: 100% !important;
+            min-height: 350px;
+            padding: 15px;
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            background: white;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .status.info {
+            background: #E0E7FF;
+            color: #4338CA;
+        }
+        .status.success {
+            background: #D1FAE5;
+            color: #065F46;
+        }
+        .status.error {
+            background: #FEE2E2;
+            color: #991B1B;
+        }
+        .paymentWidgets {
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 HyperPay Widget Test</h1>
+        
+        <div id="status"></div>
+        
+        <button id="createCheckout" onclick="createTestCheckout()">
+            Create Test Checkout
+        </button>
+        
+        <div id="payment-form-container">
+            <h3>Payment Details</h3>
+            <p>Enter your card details below:</p>
+            
+            <!-- HyperPay will inject the payment form here -->
+            <form action="test-hyperpay.html" class="paymentWidgets" data-brands="VISA MASTER MADA">
+            </form>
+            
+            <div style="margin-top: 20px; padding: 10px; background: #FEF3C7; border-radius: 5px; font-size: 12px;">
+                <strong>Test Card Numbers:</strong><br>
+                VISA: 4200 0000 0000 0000<br>
+                Master: 5300 0000 0000 0006<br>
+                CVV: Any 3 digits<br>
+                Expiry: Any future date
+            </div>
+        </div>
+        
+        <div id="debug-info" style="margin-top: 20px; font-size: 12px; color: #666;"></div>
+    </div>
+
+    <script>
+        function showStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = `status ${type}`;
+            statusDiv.textContent = message;
+        }
+
+        function showDebug(message) {
+            const debugDiv = document.getElementById('debug-info');
+            debugDiv.innerHTML += `<div>${new Date().toLocaleTimeString()}: ${message}</div>`;
+        }
+
+        async function createTestCheckout() {
+            const button = document.getElementById('createCheckout');
+            button.disabled = true;
+            button.textContent = 'Creating checkout...';
+            
+            try {
+                showStatus('Creating checkout session...', 'info');
+                showDebug('Calling checkout API...');
+                
+                const response = await fetch('http://localhost:3001/api/payment/checkout', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        plan: 'pro',
+                        billingCycle: 'monthly',
+                        amount: 100,
+                        currency: 'SAR',
+                        userEmail: 'admin'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to create checkout');
+                }
+                
+                showDebug(`Checkout created: ${data.checkoutId}`);
+                showDebug(`Script URL: ${data.scriptUrl}`);
+                showDebug(`Brands: ${data.brands.join(', ')}`);
+                
+                // Update form brands
+                const form = document.querySelector('.paymentWidgets');
+                form.setAttribute('data-brands', data.brands.join(' '));
+                
+                // Load HyperPay widget script
+                showStatus('Loading payment widget...', 'info');
+                
+                const scriptUrl = `https://test.oppwa.com/v1/paymentWidgets.js?checkoutId=${data.checkoutId}`;
+                showDebug(`Loading script: ${scriptUrl}`);
+                
+                // Remove existing script if any
+                const existingScript = document.querySelector('script[src*="paymentWidgets.js"]');
+                if (existingScript) {
+                    existingScript.remove();
+                    showDebug('Removed existing script');
+                }
+                
+                const script = document.createElement('script');
+                script.src = scriptUrl;
+                script.onload = () => {
+                    showDebug('Script loaded successfully');
+                    showDebug('Waiting for widget to initialize...');
+                    
+                    // Check if widget injected content
+                    setTimeout(() => {
+                        const form = document.querySelector('.paymentWidgets');
+                        const formHtml = form?.innerHTML;
+                        
+                        showDebug(`Form HTML length: ${formHtml?.length || 0} chars`);
+                        
+                        if (formHtml && formHtml.trim().length > 0) {
+                            showStatus('Payment form ready! Enter your card details.', 'success');
+                            form.classList.add('widget-loaded');
+                        } else {
+                            showStatus('⚠️ Widget loaded but form not injected. Check console.', 'error');
+                            showDebug('Possible issues:');
+                            showDebug('1. Checkout ID might be invalid');
+                            showDebug('2. Form attributes might be incorrect');
+                            showDebug('3. HyperPay might have returned an error');
+                            console.error('Form element:', form);
+                            console.error('Expected data-brands:', form?.getAttribute('data-brands'));
+                        }
+                    }, 1000);
+                    
+                    document.getElementById('payment-form-container').classList.add('active');
+                    button.textContent = 'Create Another Checkout';
+                    button.disabled = false;
+                };
+                script.onerror = () => {
+                    showDebug('Script failed to load');
+                    showStatus('Failed to load payment form. Please try again.', 'error');
+                    button.textContent = 'Retry';
+                    button.disabled = false;
+                };
+                
+                document.body.appendChild(script);
+                
+            } catch (error) {
+                console.error('Error:', error);
+                showStatus(`Error: ${error.message}`, 'error');
+                showDebug(`Error: ${error.message}`);
+                button.textContent = 'Retry';
+                button.disabled = false;
+            }
+        }
+        
+        // Handle payment result
+        window.addEventListener('load', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const id = urlParams.get('id');
+            const resourcePath = urlParams.get('resourcePath');
+            
+            if (id) {
+                showStatus('Processing payment result...', 'info');
+                showDebug(`Payment ID: ${id}`);
+                showDebug(`Resource Path: ${resourcePath}`);
+                
+                // In production, you would verify the payment here
+                fetch(`http://localhost:3001/api/payment/verify/${id}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success) {
+                            showStatus('✅ Payment successful!', 'success');
+                            showDebug('Payment verified successfully');
+                        } else {
+                            showStatus('❌ Payment failed', 'error');
+                            showDebug('Payment verification failed');
+                        }
+                    })
+                    .catch(error => {
+                        showStatus('Error verifying payment', 'error');
+                        showDebug(`Verification error: ${error.message}`);
+                    });
+            }
+        });
+    </script>
+</body>
+</html>

@@ -22,7 +22,15 @@ router.post('/login', async (req, res) => {
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
     }
   });
-  res.json({ token: session.token, role: user.role });
+  res.json({ 
+    token: session.token, 
+    role: user.role,
+    userId: user.id,
+    username: user.username,
+    plan: user.plan,
+    credits: user.credits,
+    maxCredits: user.maxCredits
+  });
 });
 
 // GET /api/me
@@ -36,7 +44,7 @@ router.get('/me', async (req, res) => {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   const user = await prisma.user.findUnique({ where: { id: session.userId } });
-  res.json({ username: user.username, role: user.role });
+  res.json({ id: user.id, username: user.username, role: user.role, plan: user.plan, credits: user.credits });
 });
 
 // POST /api/logout

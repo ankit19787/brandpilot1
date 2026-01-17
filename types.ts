@@ -97,4 +97,4 @@ export interface UserPlan {
   maxCredits: number;
 }
 
-export type ActiveTab = 'dashboard' | 'dna' | 'strategist' | 'engine' | 'performance' | 'monetization' | 'calendar' | 'connections' | 'credentials' | 'documentation' | 'adminposts';
+export type ActiveTab = 'dashboard' | 'dna' | 'strategist' | 'engine' | 'performance' | 'monetization' | 'calendar' | 'connections' | 'credentials' | 'payment-history' | 'documentation' | 'adminposts';

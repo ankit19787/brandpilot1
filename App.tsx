@@ -10,6 +10,7 @@ import Monetization from './components/Monetization';
 import Connections from './components/Connections';
 import Credentials from './components/Credentials';
 import Documentation from './components/Documentation';
+import PaymentHistory from './components/PaymentHistory';
 import AdminLogin from './components/AdminLogin';
 import AdminPosts from './components/AdminPosts';
 import { ActiveTab, BrandDNA as BrandDNAType, ContentItem, SAMPLE_SCHEDULED_POSTS } from './types';
@@ -25,6 +26,24 @@ const App: React.FC = () => {
   const [autoPost, setAutoPost] = useState<boolean>(false);
   const [auth, setAuth] = useState<{ token: string; role: string } | null>(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [userPlan, setUserPlan] = useState<{ plan: string; credits: number; maxCredits: number }>({
+    plan: 'pro',
+    credits: 7500,
+    maxCredits: 10000
+  });
+  const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
+
+  const handleCreditsUpdate = (newCredits: number) => {
+    setUserPlan(prev => ({ ...prev, credits: newCredits }));
+  };
+
+  const handlePlanUpgrade = (newPlan: string, credits: number, maxCredits: number) => {
+    setUserPlan({ plan: newPlan, credits, maxCredits });
+  };
+
+  const handleOpenPlanModal = () => {
+    setIsPlanModalOpen(true);
+  };
 
   const addToast = (message: string, type: 'success' | 'info' = 'info') => {
     if (!message) return;
@@ -54,7 +73,29 @@ const App: React.FC = () => {
           });
 
           if (response.ok) {
-            setAuth(authData);
+            const validationData = await response.json();
+            
+            // Update auth with userId from validation
+            const enrichedAuth = {
+              ...authData,
+              userId: validationData.user.id,
+              username: validationData.user.username,
+              role: validationData.user.role,
+              plan: validationData.user.plan,
+              credits: validationData.user.credits,
+              maxCredits: validationData.user.maxCredits
+            };
+            
+            setAuth(enrichedAuth);
+            setUserPlan({
+              plan: validationData.user.plan,
+              credits: validationData.user.credits,
+              maxCredits: validationData.user.maxCredits
+            });
+            
+            // Update localStorage with complete data
+            localStorage.setItem('brandpilot_auth', JSON.stringify(enrichedAuth));
+            
             addToast('Session restored successfully', 'success');
           } else {
             // Token is invalid, clear it
@@ -96,7 +137,18 @@ const App: React.FC = () => {
           }
         });
 
-        if (!response.ok) {
+        if (response.ok) {
+          const validationData = await response.json();
+          
+          // Update user plan from validation if available
+          if (validationData.user) {
+            setUserPlan({
+              plan: validationData.user.plan,
+              credits: validationData.user.credits,
+              maxCredits: validationData.user.maxCredits
+            });
+          }
+        } else {
           // Token is invalid or expired
           localStorage.removeItem('brandpilot_auth');
           setAuth(null);
@@ -191,8 +243,24 @@ const App: React.FC = () => {
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard': return <Dashboard onNavigate={navigateWithTopic} hasDNA={!!dna} />;
-      case 'dna': return <BrandDNA dna={dna} setDna={setDna} />;
-      case 'strategist': return <ContentStrategist dna={dna} onNavigate={navigateWithTopic} />;
+      case 'dna': return (
+        <BrandDNA 
+          dna={dna} 
+          setDna={setDna} 
+          userPlan={userPlan}
+          onUpgrade={handleOpenPlanModal}
+          onCreditsUpdate={handleCreditsUpdate}
+        />
+      );
+      case 'strategist': return (
+        <ContentStrategist 
+          dna={dna} 
+          onNavigate={navigateWithTopic}
+          userPlan={userPlan}
+          onUpgrade={handleOpenPlanModal}
+          onCreditsUpdate={handleCreditsUpdate}
+        />
+      );
       case 'engine': return (
         <ContentEngine 
           dna={dna} 
@@ -201,6 +269,9 @@ const App: React.FC = () => {
           onSchedulePost={handleSchedulePost}
           autoPostEnabled={autoPost}
           onToggleAutoPost={setAutoPost}
+          userPlan={userPlan}
+          onUpgrade={handleOpenPlanModal}
+          onCreditsUpdate={handleCreditsUpdate}
         />
       );
       case 'calendar': return (
@@ -213,7 +284,16 @@ const App: React.FC = () => {
       case 'connections': return <Connections onAction={addToast} />;
       case 'credentials': return <Credentials onAction={addToast} />;
       case 'performance': return <PerformanceBrain onNavigate={navigateWithTopic} />;
-      case 'monetization': return <Monetization dna={dna} onAction={addToast} />;
+      case 'monetization': return (
+        <Monetization 
+          dna={dna} 
+          onAction={addToast}
+          userPlan={userPlan}
+          onUpgrade={handleOpenPlanModal}
+          onCreditsUpdate={handleCreditsUpdate}
+        />
+      );
+      case 'payment-history': return <PaymentHistory onAction={addToast} />;
       case 'documentation': return <Documentation />;
       case 'adminposts': return <AdminPosts />;
       default: return <Dashboard onNavigate={navigateWithTopic} hasDNA={!!dna} />;
@@ -238,7 +318,14 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} onAction={addToast} handleLogout={handleLogout} />
+      <Sidebar 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab} 
+        onAction={addToast} 
+        handleLogout={handleLogout}
+        userPlan={userPlan}
+        onPlanUpgrade={handlePlanUpgrade}
+      />
       
       <main className="flex-1 ml-64 min-h-screen pb-12">
         <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 py-4 flex justify-between items-center">

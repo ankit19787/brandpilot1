@@ -2,30 +2,49 @@
 import React, { useState, useEffect } from 'react';
 import { Compass, Calendar, Target, Zap, Loader2, ArrowRight } from 'lucide-react';
 import { generateContentStrategy } from '../services/gemini.client';
+import { deductCredits } from '../services/creditService';
+import { canUseFeature, CREDIT_COSTS } from '../services/planService';
 import { BrandDNA, ContentStrategy, ActiveTab } from '../types';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import FeatureGate from './FeatureGate';
+import CreditsWarning from './CreditsWarning';
 
 interface ContentStrategistProps {
   dna: BrandDNA | null;
   onNavigate: (tab: ActiveTab, topic: string) => void;
+  userPlan?: { plan: string; credits: number; maxCredits: number };
+  onUpgrade: () => void;
+  onCreditsUpdate: (newCredits: number) => void;
 }
 
-const ContentStrategist: React.FC<ContentStrategistProps> = ({ dna, onNavigate }) => {
+const ContentStrategist: React.FC<ContentStrategistProps> = ({ dna, onNavigate, userPlan = { plan: 'free', credits: 0, maxCredits: 1000 }, onUpgrade, onCreditsUpdate }) => {
   const [strategy, setStrategy] = useState<ContentStrategy | null>(null);
   const [loading, setLoading] = useState(false);
+  
+  const isLocked = !canUseFeature(userPlan.plan, 'contentStrategy');
+  const hasEnoughCredits = userPlan.credits >= CREDIT_COSTS.contentStrategy;
 
   useEffect(() => {
-    if (dna && !strategy) {
+    if (dna && !strategy && !isLocked) {
       handleGenerate();
     }
   }, [dna]);
 
   const handleGenerate = async () => {
-    if (!dna) return;
+    if (!dna || isLocked) return;
+    
+    if (!hasEnoughCredits) {
+      onUpgrade();
+      return;
+    }
+    
     setLoading(true);
     try {
-      const result = await generateContentStrategy(dna);
-      setStrategy(result);
+      const result = await deductCredits('default_user', CREDIT_COSTS.contentStrategy, 'Content Strategy');
+      onCreditsUpdate(result.credits);
+      
+      const strategyResult = await generateContentStrategy(dna);
+      setStrategy(strategyResult);
     } catch (error) {
       console.error(error);
     } finally {
@@ -69,26 +88,39 @@ const ContentStrategist: React.FC<ContentStrategistProps> = ({ dna, onNavigate }
   ] : [];
 
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500">
-      <div className="flex justify-between items-start">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center">
-            <Compass size={28} />
+    <FeatureGate
+      isLocked={isLocked}
+      requiredPlan="pro"
+      featureName="AI Content Strategist"
+      onUpgrade={onUpgrade}
+    >
+      <div className="p-8 max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500">
+        <div className="flex justify-between items-start">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center">
+              <Compass size={28} />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-slate-900">AI Content Strategist</h1>
+              <p className="text-slate-500">Personalized growth roadmap based on your Brand DNA.</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-3xl font-bold text-slate-900">AI Content Strategist</h1>
-            <p className="text-slate-500">Personalized growth roadmap based on your Brand DNA.</p>
-          </div>
+          <button 
+            onClick={handleGenerate}
+            className="bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-xl font-bold hover:bg-slate-50 flex items-center gap-2 transition-all"
+          >
+            <Zap size={18} className="text-indigo-500" /> Refresh Strategy
+          </button>
         </div>
-        <button 
-          onClick={handleGenerate}
-          className="bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-xl font-bold hover:bg-slate-50 flex items-center gap-2 transition-all"
-        >
-          <Zap size={18} className="text-indigo-500" /> Refresh Strategy
-        </button>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <CreditsWarning
+          currentCredits={userPlan.credits}
+          requiredCredits={CREDIT_COSTS.contentStrategy}
+          action="generate a content strategy"
+          onUpgrade={onUpgrade}
+        />
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
           <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
             <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
@@ -175,7 +207,8 @@ const ContentStrategist: React.FC<ContentStrategistProps> = ({ dna, onNavigate }
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </FeatureGate>
   );
 };
 

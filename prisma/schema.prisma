@@ -11,38 +11,108 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  username     String   @unique
-  passwordHash String
-  role         String   // 'admin' | 'user'
-  plan         String   @default("free") // 'free' | 'pro' | 'business' | 'enterprise'
-  credits      Int      @default(1000) // AI credits remaining
-  maxCredits   Int      @default(1000) // Max credits per month based on plan
-  createdAt    DateTime @default(now())
-  sessions     Session[]
-  posts        Post[]
-  logs         Log[]
+  id              String        @id @default(uuid())
+  username        String        @unique
+  passwordHash    String
+  role            String        // 'admin' | 'user'
+  plan            String        @default("free") // 'free' | 'pro' | 'business' | 'enterprise'
+  credits         Int           @default(1000) // AI credits remaining
+  maxCredits      Int           @default(1000) // Max credits per month based on plan
+  creditsResetAt  DateTime?     // Last time credits were reset
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @default(now()) @updatedAt
+  sessions        Session[]
+  posts           Post[]
+  logs            Log[]
+  creditHistory   CreditTransaction[]
+  subscriptions   Subscription[]
 }
 
 model Session {
   id        String   @id @default(uuid())
-  user      User     @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId    String
   token     String   @unique
   createdAt DateTime @default(now())
   expiresAt DateTime
+  
+  @@index([userId])
+  @@index([token])
 }
 
 model Post {
   id           String   @id @default(uuid())
-  user         User     @relation(fields: [userId], references: [id])
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId       String
-  platform     String   // 'facebook' | 'instagram' | 'twitter'
+  platform     String   // 'facebook' | 'instagram' | 'twitter' | 'linkedin' | 'youtube'
   content      String
   imageUrl     String?
   status       String   // 'draft' | 'scheduled' | 'published' | 'failed'
   scheduledFor DateTime?
+  publishedAt  DateTime?
+  metadata     String?  // JSON string for platform-specific data
   createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now()) @updatedAt
+  
+  @@index([userId])
+  @@index([createdAt])
+  @@index([status])
+}
+
+model CreditTransaction {
+  id          String   @id @default(uuid())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  amount      Int      // Positive for additions, negative for deductions
+  action      String   // 'brand_dna', 'content_generation', 'image_generation', etc.
+  description String?
+  balanceBefore Int
+  balanceAfter  Int
+  createdAt   DateTime @default(now())
+  
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Subscription {
+  id              String   @id @default(uuid())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId          String
+  plan            String   // 'free' | 'pro' | 'business' | 'enterprise'
+  status          String   // 'active' | 'cancelled' | 'expired' | 'trial'
+  stripeCustomerId String? @unique
+  stripeSubscriptionId String? @unique
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  cancelAtPeriodEnd  Boolean @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([userId])
+  @@index([status])
+}
+
+model PaymentTransaction {
+  id              String   @id @default(uuid())
+  userId          String
+  checkoutId      String   @unique // HyperPay checkout ID
+  paymentId       String?  // HyperPay payment ID after successful payment
+  plan            String   // 'pro' | 'business' | 'enterprise'
+  billingCycle    String   // 'monthly' | 'yearly'
+  amount          Float    // Amount in SAR
+  currency        String   @default("SAR")
+  status          String   // 'pending' | 'success' | 'failed' | 'cancelled'
+  paymentMethod   String?  // 'VISA' | 'MASTER' | 'MADA'
+  resultCode      String?  // HyperPay result code
+  resultDescription String?
+  metadata        String?  // JSON string for additional data
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([userId])
+  @@index([status])
+  @@index([checkoutId])
+  @@index([createdAt])
 }
 
 model Token {

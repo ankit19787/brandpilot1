@@ -284,66 +284,54 @@ export async function ensureLongLivedFacebookToken(token: string): Promise<strin
 
 export const platformAPI = {
   async publish(platform: string, content: string, onStatus: (status: string) => void, metadata?: { imageUrl?: string }) {
+    console.log('[platformAPI.publish] Called with platform:', platform);
     onStatus(`Preparing ${platform} transmission...`);
 
-    if (platform === 'X (Twitter)') {
-      const creds = await getAllCredentials();
-      const { twitterApiUrl, backendApiUrl } = await getPlatformConfig();
-      const twitterApiFullUrl = `${twitterApiUrl}/2/tweets`;
-      const proxyUrl = `${backendApiUrl}/api/twitter/2/tweets`;
-      onStatus("Calculating OAuth 1.0a HMAC-SHA1 signature...");
-
-      const nonce = Array.from(window.crypto.getRandomValues(new Uint8Array(16)))
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("");
-      const timestamp = Math.floor(Date.now() / 1000).toString();
-
-      const oauthParams: Record<string, string> = {
-        oauth_consumer_key: creds['x_api_key'],
-        oauth_token: creds['x_access_token'],
-        oauth_nonce: nonce,
-        oauth_timestamp: timestamp,
-        oauth_signature_method: "HMAC-SHA1",
-        oauth_version: "1.0",
-      };
-
-      const signature = await generateTwitterOAuth1Signature("POST", twitterApiFullUrl, oauthParams, creds['x_api_secret'], creds['x_access_secret']);
-      oauthParams["oauth_signature"] = signature;
-
-      const authHeader = "OAuth " + Object.keys(oauthParams)
-        .sort()
-        .map((k) => `${rfc3986Encode(k)}=\"${rfc3986Encode(oauthParams[k])}\"`)
-        .join(", ");
-
-      onStatus("Sending direct payload to api.twitter.com...");
+    // Check for Twitter/X platform (handle variations)
+    if (platform === 'X (Twitter)' || platform === 'Twitter' || platform.toLowerCase().includes('twitter') || platform.toLowerCase().includes('x (')) {
+      console.log('[platformAPI.publish] Matched Twitter/X block');
+      const { backendApiUrl } = await getPlatformConfig();
+      console.log('[platformAPI.publish] Backend URL:', backendApiUrl);
+      
+      if (!backendApiUrl) {
+        console.error('[platformAPI.publish] ERROR: backendApiUrl is empty!');
+        throw new Error('Backend API URL not configured. Please set backend_api_url in database.');
+      }
+      
+      // Use the working endpoint that the test script uses
+      const twitterEndpoint = `${backendApiUrl}/api/twitter/post`;
+      
+      onStatus("Sending tweet to backend...");
+      console.log('[platformAPI.publish] Posting to:', twitterEndpoint);
+      
       try {
-        const res = await fetch(proxyUrl, {
+        const res = await fetch(twitterEndpoint, {
           method: "POST",
           headers: {
-            "Authorization": authHeader,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({ text: content }),
         });
 
+        console.log('[platformAPI.publish] Response status:', res.status);
         if (!res.ok) {
-          const json = await res.json().catch(() => ({ detail: "Network response was not ok" }));
-          throw new Error(json.detail || `X API Error: ${res.status}`);
+          const json = await res.json().catch(() => ({ error: "Network response was not ok" }));
+          console.error('[platformAPI.publish] Error response:', json);
+          throw new Error(json.error || `Twitter API Error: ${res.status}`);
         }
 
         const json = await res.json();
+        console.log('[platformAPI.publish] Success response:', json);
         onStatus(`Published successfully! ID: ${json.data.id}`);
-        return { status: 201, id: json.data.id, url: `x.com/status/${json.data.id}` };
+        return { status: 201, id: json.data.id, url: `https://x.com/i/web/status/${json.data.id}` };
       } catch (err: any) {
-        if (err.message.includes('Failed to fetch')) {
-          onStatus("CRITICAL: CORS Block detected. Browser blocked direct request to Twitter.");
-          throw new Error("Failed to fetch: Browser blocked the request. This usually requires a server-side proxy or specific browser settings to allow api.twitter.com.");
-        }
-        onStatus(`Gateway Error: ${err.message}`);
+        console.error('[platformAPI.publish] Caught error:', err);
+        onStatus(`Twitter Error: ${err.message}`);
         throw err;
       }
     }
 
+    console.log('[platformAPI.publish] Did not match X (Twitter), checking Instagram/Facebook...');
     if (platform === 'Instagram' || platform === 'Facebook') {
       const creds = await getAllCredentials();
       const { instagramApiUrl, facebookApiUrl, facebookApiVersion } = await getPlatformConfig();
@@ -478,6 +466,7 @@ export const platformAPI = {
       }
     }
 
+    console.log('[platformAPI.publish] Falling back to mock response for platform:', platform);
     onStatus(`Simulation: Post pushed to ${platform}.`);
     return { status: 201, id: "mock_" + Date.now(), url: "#" };
   }
