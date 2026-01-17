@@ -53,9 +53,32 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onAction, curren
       const resourcePath = urlParams.get('resourcePath');
       
       if (id) {
+        // Clean up old processed payments (older than 24 hours)
+        const processedPayments = JSON.parse(localStorage.getItem('processed_payments') || '{}');
+        const now = Date.now();
+        const oneDayMs = 24 * 60 * 60 * 1000;
+        Object.keys(processedPayments).forEach(key => {
+          if (now - processedPayments[key].timestamp > oneDayMs) {
+            delete processedPayments[key];
+          }
+        });
+        localStorage.setItem('processed_payments', JSON.stringify(processedPayments));
+        
+        // Check if we've already processed this payment ID
+        if (processedPayments[id]) {
+          console.log('Payment already processed, skipping:', id);
+          // Clean up URL immediately
+          window.history.replaceState({}, document.title, window.location.pathname);
+          return;
+        }
+        
         console.log('Payment callback detected:', { id, resourcePath });
         setHasCheckedPayment(true);
         setIsProcessing(true);
+        
+        // Mark this payment as being processed
+        processedPayments[id] = { timestamp: Date.now(), processed: true };
+        localStorage.setItem('processed_payments', JSON.stringify(processedPayments));
         
         try {
           onAction('Verifying payment...', 'info');
@@ -103,15 +126,32 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onAction, curren
               window.location.reload();
             }, 2000);
           } else {
-            // Only show error if it's a real failure, not a duplicate check
-            if (!verifyData.error || !verifyData.error.includes('No payment session found')) {
-              onAction(verifyData.message || 'Payment failed. Please try again.', 'info');
+            // Handle payment failure
+            const errorMessage = verifyData.error || verifyData.message || 'Payment failed';
+            
+            // Only show error if it's NOT a session expired/not found error
+            if (!errorMessage.includes('No payment session found') && 
+                !errorMessage.includes('session expired') &&
+                !errorMessage.includes('30min ago')) {
+              onAction(errorMessage, 'info');
+            } else {
+              console.log('Skipping expired session error message');
             }
+            
             window.history.replaceState({}, document.title, window.location.pathname);
           }
-        } catch (error) {
+        } catch (error: any) {
           console.error('Payment verification error:', error);
-          // Don't show error for duplicate verification attempts
+          
+          // Don't show error for expired sessions or duplicate verification attempts
+          const errorMessage = error?.message || '';
+          if (!errorMessage.includes('No payment session found') && 
+              !errorMessage.includes('session expired') &&
+              !errorMessage.includes('30min ago')) {
+            // Only log non-session-expired errors
+            console.error('Unexpected payment verification error:', error);
+          }
+          
           window.history.replaceState({}, document.title, window.location.pathname);
         } finally {
           setIsProcessing(false);
@@ -236,7 +276,7 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onAction, curren
       ],
       limits: {
         posts: 'Unlimited',
-        platforms: '5 platforms (Instagram, Facebook, X, LinkedIn, YouTube)',
+        platforms: '3 platforms (Instagram, Facebook, X)',
         aiGeneration: '10,000 credits',
         analytics: 'Advanced analytics',
         scheduling: 'Auto-posting enabled'
@@ -269,7 +309,7 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onAction, curren
       ],
       limits: {
         posts: 'Unlimited',
-        platforms: '6 platforms (All + WhatsApp)',
+        platforms: '3 platforms (Instagram, Facebook, X)',
         aiGeneration: '50,000 credits',
         analytics: 'Advanced analytics + exports',
         scheduling: 'Advanced scheduling & automation'

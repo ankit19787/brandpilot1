@@ -46,6 +46,7 @@ interface ContentEngineProps {
   userPlan?: { plan: string; credits: number; maxCredits: number };
   onUpgrade: () => void;
   onCreditsUpdate: (newCredits: number) => void;
+  userId?: string;
 }
 
 const ContentEngine: React.FC<ContentEngineProps> = ({ 
@@ -57,7 +58,8 @@ const ContentEngine: React.FC<ContentEngineProps> = ({
   onToggleAutoPost,
   userPlan = { plan: 'pro', credits: 0, maxCredits: 10000 },
   onUpgrade,
-  onCreditsUpdate
+  onCreditsUpdate,
+  userId = 'default_user'
 }) => {
   // Multi-select platform state
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(['Instagram']);
@@ -126,16 +128,32 @@ const ContentEngine: React.FC<ContentEngineProps> = ({
     try {
       // Use first selected platform for content generation
       const mainPlatform = selectedPlatforms[0] || platform;
-      const textResult = await generatePost(mainPlatform, topic, activeDna);
-      setGeneratedContent(textResult);
+      // Only deduct credits when using AI (not in manual mode)
+      const textResult = await generatePost(mainPlatform, topic, activeDna, !isManualMode ? userId : undefined);
+      
+      // Update credits if returned from API
+      if (typeof textResult === 'object' && textResult.credits !== undefined) {
+        onCreditsUpdate(textResult.credits);
+        setGeneratedContent(textResult.content || textResult);
+      } else {
+        setGeneratedContent(textResult);
+      }
       setLoading(false); // Text is ready, UI is interactive
 
       // 2. Visual Synthesis (Priority 2 - Background) - Only if no manual URL provided and no image already generated
-      if (visualPlatforms.includes(mainPlatform) && !manualImageUrl && !generatedImageUrl) {
+      if (visualPlatforms.includes(mainPlatform) && !manualImageUrl && !generatedImageUrl && !isManualMode) {
         setGeneratingVisuals(true);
         try {
-          const imageResult = await generateImage(topic, activeDna);
-          setGeneratedImageUrl(imageResult);
+          // Only deduct credits when using AI to generate image
+          const imageResult = await generateImage(topic, activeDna, userId);
+          
+          // Update credits if returned from API
+          if (typeof imageResult === 'object' && imageResult.credits !== undefined) {
+            onCreditsUpdate(imageResult.credits);
+            setGeneratedImageUrl(imageResult.imageUrl || imageResult);
+          } else {
+            setGeneratedImageUrl(imageResult);
+          }
         } catch (imgErr) {
           console.error("Visual gen failed:", imgErr);
         } finally {
@@ -197,6 +215,7 @@ const ContentEngine: React.FC<ContentEngineProps> = ({
       setApiLogs([]);
       try {
         const targetImage = getTargetImage();
+        // Always deduct credits for publishing, regardless of how content was created
         const response = await platformAPI.publish(
           plt, 
           generatedContent, 
@@ -204,13 +223,18 @@ const ContentEngine: React.FC<ContentEngineProps> = ({
             setPublishStatus(status);
             setApiLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${status}`]);
           }, 
-          { imageUrl: targetImage || undefined }
+          { imageUrl: targetImage || undefined, userId }
         );
+        
+        // Update credits if returned from API
+        if (response && response.credits !== undefined) {
+          onCreditsUpdate(response.credits);
+        }
         
         // Save post to database
         try {
           await createPost({
-            userId: 'default_user', // You can replace with actual user ID if you have authentication
+            userId: userId,
             platform: plt,
             content: generatedContent,
             imageUrl: targetImage || undefined,
@@ -261,13 +285,18 @@ const ContentEngine: React.FC<ContentEngineProps> = ({
             setPublishStatus(status);
             setApiLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${status}`]);
           },
-          { imageUrl: targetImage || undefined }
+          { imageUrl: targetImage || undefined, userId }
         );
+        
+        // Update credits if returned from API
+        if (response && response.credits !== undefined) {
+          onCreditsUpdate(response.credits);
+        }
 
         // Save post to database
         try {
           await createPost({
-            userId: 'default_user',
+            userId: userId,
             platform: plt.name,
             content: generatedContent,
             imageUrl: targetImage || undefined,
@@ -342,10 +371,7 @@ const ContentEngine: React.FC<ContentEngineProps> = ({
   
   const availablePlatformNames = planLimits.platforms;
   const availablePlatforms = platformsList.filter(p => availablePlatformNames.includes(p.name));
-  const lockedPlatforms = [
-    { name: 'LinkedIn', icon: Globe, color: 'text-blue-600', locked: !availablePlatformNames.includes('LinkedIn') },
-    { name: 'YouTube', icon: Terminal, color: 'text-red-600', locked: !availablePlatformNames.includes('YouTube') },
-  ].filter(p => p.locked);
+  const lockedPlatforms: any[] = [];
 
   const currentPreviewImage = getPreviewImage();
   const showOnlyManualUrl = manualImageUrl && !manualImageUrl.startsWith('blob:');

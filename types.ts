@@ -5,6 +5,7 @@ export interface BrandDNA {
   contentPillars: string[];
   audienceType: string;
   writingStyle: string;
+  isSample?: boolean; // Flag to indicate if this is sample data
 }
 
 export const SAMPLE_DNA: BrandDNA = {
@@ -58,7 +59,7 @@ export interface ContentItem {
 export const SAMPLE_SCHEDULED_POSTS: ContentItem[] = [
   {
     id: '1',
-    platform: 'LinkedIn',
+    platform: 'Instagram',
     content: "Why 90% of AI startups will fail in 2024: They are building wrappers, not workflows. True value lies in the unique data moats and operational integration. #AI #Founders",
     status: 'Scheduled',
     scheduledFor: new Date(Date.now() + 86400000).toISOString(), // Tomorrow
@@ -97,4 +98,4 @@ export interface UserPlan {
   maxCredits: number;
 }
 
-export type ActiveTab = 'dashboard' | 'dna' | 'strategist' | 'engine' | 'performance' | 'monetization' | 'calendar' | 'connections' | 'credentials' | 'payment-history' | 'documentation' | 'adminposts';
+export type ActiveTab = 'dashboard' | 'dna' | 'strategist' | 'engine' | 'performance' | 'monetization' | 'calendar' | 'connections' | 'credentials' | 'payment-history' | 'credits' | 'documentation' | 'adminposts' | 'platform-responses';

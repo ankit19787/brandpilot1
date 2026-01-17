@@ -26,6 +26,9 @@ model User {
   logs            Log[]
   creditHistory   CreditTransaction[]
   subscriptions   Subscription[]
+  brandDNA        BrandDNA[]
+  contentStrategies ContentStrategy[]
+  monetizationPlans MonetizationPlan[]
 }
 
 model Session {
@@ -51,12 +54,30 @@ model Post {
   scheduledFor DateTime?
   publishedAt  DateTime?
   metadata     String?  // JSON string for platform-specific data
+  
+  // Platform response tracking
+  platformPostId      String?  // ID returned by the platform (Twitter ID, Facebook post ID, etc.)
+  platformResponse    String?  // JSON string of the full platform response
+  platformError       String?  // Error message if publication failed
+  publishAttempts     Int      @default(0) // Number of publish attempts
+  lastPublishAttempt  DateTime? // Last time we attempted to publish
+  
+  // Analytics fields
+  views        Int      @default(0)
+  likes        Int      @default(0)
+  shares       Int      @default(0)
+  comments     Int      @default(0)
+  engagement   Float    @default(0) // Calculated engagement rate
+  category     String?  // Content category for analytics grouping
+  
   createdAt    DateTime @default(now())
   updatedAt    DateTime @default(now()) @updatedAt
   
   @@index([userId])
   @@index([createdAt])
   @@index([status])
+  @@index([category])
+  @@index([platformPostId])
 }
 
 model CreditTransaction {
@@ -137,4 +158,54 @@ model Config {
   key       String   @unique
   value     String
   updatedAt DateTime @updatedAt
+}
+
+model BrandDNA {
+  id              String   @id @default(uuid())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId          String
+  voice           String
+  personality     String   // JSON array of personality traits
+  contentPillars  String   // JSON array of content pillars
+  audienceType    String
+  writingStyle    String
+  inputData       String   // Original input used for analysis
+  isActive        Boolean  @default(true) // Current active DNA
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([userId])
+  @@index([isActive])
+}
+
+model ContentStrategy {
+  id                String   @id @default(uuid())
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId            String
+  dailyStrategy     String
+  platformFocus     String   // JSON array of platforms
+  suggestedHooks    String   // JSON array of hooks
+  recommendedMix    String   // JSON object with storytelling, authority, cta percentages
+  brandDNASnapshot  String   // JSON of the Brand DNA used to generate this strategy
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@index([userId])
+  @@index([isActive])
+}
+
+model MonetizationPlan {
+  id              String   @id @default(uuid())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId          String
+  ideas           String   // JSON array of monetization ideas
+  dnaSnapshot     String   // JSON of the Brand DNA used
+  metricsSnapshot String   // JSON of metrics data used
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([userId])
+  @@index([isActive])
 }

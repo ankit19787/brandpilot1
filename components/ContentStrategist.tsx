@@ -9,20 +9,42 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import FeatureGate from './FeatureGate';
 import CreditsWarning from './CreditsWarning';
 
+const API_PREFIX = window.location.hostname === 'localhost' ? 'http://localhost:3001/api' : '/api';
+
 interface ContentStrategistProps {
   dna: BrandDNA | null;
   onNavigate: (tab: ActiveTab, topic: string) => void;
   userPlan?: { plan: string; credits: number; maxCredits: number };
   onUpgrade: () => void;
   onCreditsUpdate: (newCredits: number) => void;
+  userId?: string;
 }
 
-const ContentStrategist: React.FC<ContentStrategistProps> = ({ dna, onNavigate, userPlan = { plan: 'free', credits: 0, maxCredits: 1000 }, onUpgrade, onCreditsUpdate }) => {
+const ContentStrategist: React.FC<ContentStrategistProps> = ({ dna, onNavigate, userPlan = { plan: 'free', credits: 0, maxCredits: 1000 }, onUpgrade, onCreditsUpdate, userId }) => {
   const [strategy, setStrategy] = useState<ContentStrategy | null>(null);
   const [loading, setLoading] = useState(false);
   
   const isLocked = !canUseFeature(userPlan.plan, 'contentStrategy');
   const hasEnoughCredits = userPlan.credits >= CREDIT_COSTS.contentStrategy;
+
+  // Load saved strategy on mount
+  useEffect(() => {
+    if (userId && !strategy) {
+      loadSavedStrategy();
+    }
+  }, [userId]);
+
+  const loadSavedStrategy = async () => {
+    try {
+      const response = await fetch(`${API_PREFIX}/content-strategy/${userId}`);
+      if (response.ok) {
+        const savedStrategy = await response.json();
+        setStrategy(savedStrategy);
+      }
+    } catch (error) {
+      console.log('No saved strategy found');
+    }
+  };
 
   useEffect(() => {
     if (dna && !strategy && !isLocked) {
@@ -40,17 +62,92 @@ const ContentStrategist: React.FC<ContentStrategistProps> = ({ dna, onNavigate, 
     
     setLoading(true);
     try {
-      const result = await deductCredits('default_user', CREDIT_COSTS.contentStrategy, 'Content Strategy');
-      onCreditsUpdate(result.credits);
+      // First, check if user has existing active Content Strategy
+      if (userId) {
+        console.log('📦 Checking for existing Content Strategy in database...');
+        const existingResponse = await fetch(`${API_PREFIX}/content-strategy/${userId}`);
+        if (existingResponse.ok) {
+          const existingData = await existingResponse.json();
+          if (existingData.strategy) {
+            console.log('✅ Found existing Content Strategy, using cached data');
+            console.log('📊 Strategy object structure:', existingData.strategy);
+            console.log('📊 RecommendedMix:', existingData.strategy.recommendedMix);
+            setStrategy(existingData.strategy);
+            setLoading(false);
+            return;
+          }
+        }
+      }
+
+      console.log('🚀 No existing strategy found, generating new Content Strategy with userId:', userId);
+      const strategyResult = await generateContentStrategy(dna, userId);
+      console.log('✅ Content strategy received:', strategyResult);
       
-      const strategyResult = await generateContentStrategy(dna);
-      setStrategy(strategyResult);
+      // Handle response based on whether it includes credit info
+      if (strategyResult.credits !== undefined) {
+        // Response with credit information (has user context)
+        onCreditsUpdate(strategyResult.credits);
+        // Remove credits info from the strategy object before setting
+        const { credits, creditCost, ...strategy } = strategyResult;
+        setStrategy(strategy);
+      } else {
+        // Response without credit info (no user context)
+        setStrategy(strategyResult);
+      }
+      
     } catch (error) {
-      console.error(error);
+      console.error('Content strategy error:', error);
     } finally {
       setLoading(false);
     }
   };
+
+  // Add debug logging for userId state
+  useEffect(() => {
+    console.log('🔍 ContentStrategist userId state:', {
+      userId,
+      hasUserId: !!userId,
+      dnaExists: !!dna,
+      strategyExists: !!strategy,
+      componentMounted: true
+    });
+  }, [userId, dna, strategy]);
+
+  // Auto-load existing Content Strategy for logged-in users
+  useEffect(() => {
+    const loadExistingStrategy = async () => {
+      if (!userId || strategy) {
+        console.log('🔍 ContentStrategy auto-load skipped - userId:', !!userId, 'strategy exists:', !!strategy);
+        return;
+      }
+      
+      // Try to load strategy even without dna first, in case user has existing data
+      try {
+        console.log('📦 Auto-loading existing Content Strategy for user:', userId);
+        const existingResponse = await fetch(`${API_PREFIX}/content-strategy/${userId}`);
+        if (existingResponse.ok) {
+          const existingData = await existingResponse.json();
+          if (existingData.strategy) {
+            console.log('✅ Auto-loaded existing Content Strategy');
+            console.log('📊 Strategy object structure:', existingData.strategy);
+            console.log('📊 RecommendedMix:', existingData.strategy.recommendedMix);
+            setStrategy(existingData.strategy);
+          } else {
+            console.log('📭 No Content Strategy data found in response');
+          }
+        } else {
+          console.log('📭 No existing Content Strategy found (404)');
+        }
+      } catch (error) {
+        console.log('⚠️ Error loading existing Content Strategy:', error);
+      }
+    };
+    
+    // Add small delay to ensure userId is properly set
+    if (userId) {
+      setTimeout(loadExistingStrategy, 200);
+    }
+  }, [userId, strategy]); // Monitor userId and strategy, not dna
 
   if (!dna) {
     return (
@@ -81,10 +178,10 @@ const ContentStrategist: React.FC<ContentStrategistProps> = ({ dna, onNavigate, 
     );
   }
 
-  const chartData = strategy ? [
-    { name: 'Storytelling', value: strategy.recommendedMix.storytelling, color: '#6366f1' },
-    { name: 'Authority', value: strategy.recommendedMix.authority, color: '#0ea5e9' },
-    { name: 'CTA/Sales', value: strategy.recommendedMix.cta, color: '#10b981' },
+  const chartData = strategy && strategy.recommendedMix ? [
+    { name: 'Storytelling', value: strategy.recommendedMix.storytelling || 0, color: '#6366f1' },
+    { name: 'Authority', value: strategy.recommendedMix.authority || 0, color: '#0ea5e9' },
+    { name: 'CTA/Sales', value: strategy.recommendedMix.cta || 0, color: '#10b981' },
   ] : [];
 
   return (
@@ -109,7 +206,7 @@ const ContentStrategist: React.FC<ContentStrategistProps> = ({ dna, onNavigate, 
             onClick={handleGenerate}
             className="bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-xl font-bold hover:bg-slate-50 flex items-center gap-2 transition-all"
           >
-            <Zap size={18} className="text-indigo-500" /> Refresh Strategy
+            <Zap size={18} className="text-indigo-500" /> {strategy ? 'Refresh Strategy' : 'Generate Strategy'}
           </button>
         </div>
 
@@ -140,7 +237,7 @@ const ContentStrategist: React.FC<ContentStrategistProps> = ({ dna, onNavigate, 
               High-Impact Hooks
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {strategy?.suggestedHooks.map((hook, i) => (
+              {(strategy?.suggestedHooks || []).map((hook, i) => (
                 <div 
                   key={i} 
                   onClick={() => onNavigate('engine', hook)}
@@ -195,7 +292,7 @@ const ContentStrategist: React.FC<ContentStrategistProps> = ({ dna, onNavigate, 
           <div className="bg-indigo-600 p-8 rounded-3xl text-white shadow-lg shadow-indigo-500/20">
             <h3 className="font-bold text-lg mb-2">Platform Focus</h3>
             <div className="space-y-4 mt-6">
-              {strategy?.platformFocus.map((p, i) => (
+              {(strategy?.platformFocus || []).map((p, i) => (
                 <div key={i} className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center font-bold">
                     {i + 1}
