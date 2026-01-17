@@ -23,15 +23,31 @@ async function getCloudinaryCredentials() {
   };
 }
 
+// Helper to get config value from DB
+async function getConfigValue(key: string): Promise<string> {
+  const config = await prisma.config.findUnique({ where: { key } });
+  return config?.value || "";
+}
+
+// Helper to get platform API URLs
+async function getPlatformConfig() {
+  return {
+    cloudinaryApiUrl: await getConfigValue('cloudinary_api_url'),
+    cloudinaryApiVersion: await getConfigValue('cloudinary_api_version'),
+  };
+}
+
 export async function uploadToCloudinary(base64Image: string): Promise<string> {
   const { cloudName, apiKey, apiSecret } = await getCloudinaryCredentials();
+  const { cloudinaryApiUrl, cloudinaryApiVersion } = await getPlatformConfig();
   
   if (!cloudName || !apiKey || !apiSecret) {
     throw new Error('Cloudinary credentials are not configured in database. Please add them via the Credentials tab.');
   }
   // Remove data URL prefix if present
   const base64 = base64Image.replace(/^data:image\/(png|jpeg|jpg);base64,/, '');
-  const url = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
+  const version = cloudinaryApiVersion || 'v1_1';
+  const url = `${cloudinaryApiUrl || 'https://api.cloudinary.com'}/${version}/${cloudName}/image/upload`;
   const formData = new FormData();
   formData.append('file', `data:image/png;base64,${base64}`);
   formData.append('upload_preset', 'ml_default'); // Default unsigned preset for free accounts

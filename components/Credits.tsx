@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Coins, TrendingUp, TrendingDown, RefreshCw, Sparkles, Image, FileText, Calendar } from 'lucide-react';
+import { Coins, TrendingUp, RefreshCw, Image, FileText, Calendar, Sparkles, Filter, X } from 'lucide-react';
+import { canUseFeature } from '../services/planService';
 
 interface CreditTransaction {
   id: string;
@@ -17,10 +18,16 @@ interface CreditsProps {
 
 const Credits: React.FC<CreditsProps> = ({ onAction }) => {
   const [transactions, setTransactions] = useState<CreditTransaction[]>([]);
+  const [filteredTransactions, setFilteredTransactions] = useState<CreditTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentCredits, setCurrentCredits] = useState(0);
   const [maxCredits, setMaxCredits] = useState(0);
   const [plan, setPlan] = useState('free');
+  
+  // Filter states
+  const [actionFilter, setActionFilter] = useState<string>('all');
+  const [dateFilter, setDateFilter] = useState<string>('all');
+  const [typeFilter, setTypeFilter] = useState<string>('all'); // 'all', 'spent', 'earned'
 
   useEffect(() => {
     fetchCreditsData();
@@ -56,6 +63,7 @@ const Credits: React.FC<CreditsProps> = ({ onAction }) => {
       if (historyRes.ok) {
         const historyData = await historyRes.json();
         setTransactions(historyData.transactions || []);
+        setFilteredTransactions(historyData.transactions || []);
       }
     } catch (error) {
       console.error('Error fetching credits:', error);
@@ -63,6 +71,62 @@ const Credits: React.FC<CreditsProps> = ({ onAction }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Apply filters whenever filter states or transactions change
+  useEffect(() => {
+    applyFilters();
+  }, [actionFilter, dateFilter, typeFilter, transactions]);
+
+  const applyFilters = () => {
+    let filtered = [...transactions];
+
+    // Filter by action type
+    if (actionFilter !== 'all') {
+      filtered = filtered.filter(txn => txn.action === actionFilter);
+    }
+
+    // Filter by date range
+    if (dateFilter !== 'all') {
+      const now = new Date();
+      let filterDate = new Date();
+      
+      switch (dateFilter) {
+        case '7days':
+          filterDate.setDate(now.getDate() - 7);
+          break;
+        case '30days':
+          filterDate.setDate(now.getDate() - 30);
+          break;
+        case '90days':
+          filterDate.setDate(now.getDate() - 90);
+          break;
+        default:
+          filterDate = new Date(0); // Show all
+      }
+      
+      filtered = filtered.filter(txn => new Date(txn.createdAt) >= filterDate);
+    }
+
+    // Filter by transaction type
+    if (typeFilter === 'spent') {
+      filtered = filtered.filter(txn => txn.amount < 0);
+    } else if (typeFilter === 'earned') {
+      filtered = filtered.filter(txn => txn.amount > 0);
+    }
+
+    setFilteredTransactions(filtered);
+  };
+
+  const clearFilters = () => {
+    setActionFilter('all');
+    setDateFilter('all');
+    setTypeFilter('all');
+  };
+
+  const getUniqueActions = () => {
+    const actions = [...new Set(transactions.map(txn => txn.action))];
+    return actions;
   };
 
   const getActionIcon = (action: string) => {
@@ -167,13 +231,16 @@ const Credits: React.FC<CreditsProps> = ({ onAction }) => {
           Credit Costs
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="flex items-center gap-3 p-3 bg-purple-50 rounded-lg">
-            <Sparkles size={20} className="text-purple-500" />
-            <div>
-              <p className="font-bold text-slate-900">Brand DNA</p>
-              <p className="text-sm text-slate-600">50 credits</p>
+          {/* Only show Brand DNA cost if user's plan includes it */}
+          {canUseFeature(plan, 'brandDNA') && (
+            <div className="flex items-center gap-3 p-3 bg-purple-50 rounded-lg">
+              <Sparkles size={20} className="text-purple-500" />
+              <div>
+                <p className="font-bold text-slate-900">Brand DNA</p>
+                <p className="text-sm text-slate-600">30 credits</p>
+              </div>
             </div>
-          </div>
+          )}
           <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg">
             <FileText size={20} className="text-blue-500" />
             <div>
@@ -185,7 +252,7 @@ const Credits: React.FC<CreditsProps> = ({ onAction }) => {
             <Image size={20} className="text-green-500" />
             <div>
               <p className="font-bold text-slate-900">Image Generation</p>
-              <p className="text-sm text-slate-600">40 credits</p>
+              <p className="text-sm text-slate-600">30 credits</p>
             </div>
           </div>
         </div>
@@ -194,19 +261,85 @@ const Credits: React.FC<CreditsProps> = ({ onAction }) => {
       {/* Transaction History */}
       <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
         <div className="p-6 border-b border-slate-200">
-          <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-            <Calendar size={20} className="text-indigo-600" />
-            Transaction History
-          </h3>
+          <div className="flex justify-between items-start mb-4">
+            <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+              <Calendar size={20} className="text-indigo-600" />
+              Transaction History
+            </h3>
+            <div className="text-sm text-slate-500">
+              {filteredTransactions.length} of {transactions.length} transactions
+            </div>
+          </div>
+          
+          {/* Filters */}
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-3">
+              {/* Action Filter */}
+              <div className="flex items-center gap-2">
+                <Filter size={16} className="text-slate-400" />
+                <select 
+                  value={actionFilter} 
+                  onChange={(e) => setActionFilter(e.target.value)}
+                  className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  <option value="all">All Actions</option>
+                  {getUniqueActions().map((action: string) => (
+                    <option key={action} value={action}>{getActionLabel(action)}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Date Filter */}
+              <select 
+                value={dateFilter} 
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              >
+                <option value="all">All Time</option>
+                <option value="7days">Last 7 Days</option>
+                <option value="30days">Last 30 Days</option>
+                <option value="90days">Last 90 Days</option>
+              </select>
+
+              {/* Type Filter */}
+              <select 
+                value={typeFilter} 
+                onChange={(e) => setTypeFilter(e.target.value)}
+                className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              >
+                <option value="all">All Types</option>
+                <option value="spent">Credits Spent</option>
+                <option value="earned">Credits Earned</option>
+              </select>
+
+              {/* Clear Filters */}
+              {(actionFilter !== 'all' || dateFilter !== 'all' || typeFilter !== 'all') && (
+                <button 
+                  onClick={clearFilters}
+                  className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-700 px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
+                >
+                  <X size={14} />
+                  Clear Filters
+                </button>
+              )}
+            </div>
+          </div>
         </div>
 
-        {transactions.length === 0 ? (
+        {filteredTransactions.length === 0 ? (
           <div className="p-8 text-center">
             <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <Coins className="text-slate-400" size={32} />
             </div>
-            <h3 className="text-lg font-bold text-slate-900 mb-2">No transactions yet</h3>
-            <p className="text-slate-500">Your credit usage history will appear here</p>
+            <h3 className="text-lg font-bold text-slate-900 mb-2">
+              {transactions.length === 0 ? 'No transactions yet' : 'No transactions match your filters'}
+            </h3>
+            <p className="text-slate-500">
+              {transactions.length === 0 
+                ? 'Your credit usage history will appear here' 
+                : 'Try adjusting your filters to see more results'
+              }
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -221,7 +354,7 @@ const Credits: React.FC<CreditsProps> = ({ onAction }) => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {transactions.map((txn) => (
+                {filteredTransactions.map((txn) => (
                   <tr key={txn.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4 text-sm text-slate-900">
                       {formatDate(txn.createdAt)}

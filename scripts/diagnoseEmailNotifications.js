@@ -10,7 +10,7 @@ async function diagnosisEmailIssue() {
     console.log('1️⃣ EMAIL CONFIGURATION');
     console.log('───────────────────────');
     const emailConfigs = await prisma.config.findMany({
-      where: { key: { startsWith: 'EMAIL_' } }
+      where: { key: { startsWith: 'email_' } }
     });
     
     const configMap = {};
@@ -20,7 +20,7 @@ async function diagnosisEmailIssue() {
       console.log(`  ${c.key}: ${display}`);
     });
     
-    const emailConfigured = configMap.EMAIL_HOST && configMap.EMAIL_USER && configMap.EMAIL_PASS;
+    const emailConfigured = configMap.email_host && configMap.email_user && configMap.email_pass;
     console.log(`  Status: ${emailConfigured ? '✅ Configured' : '❌ Not Configured'}\n`);
     
     // 2. Check users with emails

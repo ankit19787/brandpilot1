@@ -2,6 +2,7 @@
 import express from 'express';
 import bodyParser from 'body-parser';
 import cors from 'cors';
+import compression from 'compression';
 import crypto from 'crypto';
 import facebookTokenApi from './services/facebookTokenApi.js';
 import twitterProxyApi from './services/twitterProxyApi.js';
@@ -10,16 +11,46 @@ import { PrismaClient } from '@prisma/client';
 import * as geminiServer from './services/gemini.server.js';
 import HyperPayService from './services/hyperPayService.js';
 import emailService from './services/emailService.js';
+import metaRateLimiter from './services/metaRateLimiter.js';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
 import { swaggerOptions } from './swagger.config.js';
 
 // Load environment variables from .env.local or .env (whichever exists)
-import fs from 'fs';
 // dotenv removed for Vercel/production. Use process.env only.
 
 const app = express();
 const prisma = new PrismaClient();
+
+// In-memory cache for Config table
+const configCache = new Map();
+let configCacheTime = 0;
+const CONFIG_CACHE_TTL = 60000; // 1 minute cache
+
+// Function to get config with caching
+async function getCachedConfig(key) {
+  const now = Date.now();
+  if (now - configCacheTime > CONFIG_CACHE_TTL) {
+    configCache.clear();
+    configCacheTime = now;
+  }
+  
+  if (configCache.has(key)) {
+    return configCache.get(key);
+  }
+  
+  const config = await prisma.config.findUnique({ where: { key } });
+  if (config) {
+    configCache.set(key, config.value);
+    return config.value;
+  }
+  return null;
+}
+
+// Function to invalidate specific cache key
+function invalidateConfigCache(key) {
+  configCache.delete(key);
+}
 
 // Initialize Swagger
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
@@ -38,7 +69,7 @@ async function getHyperPayService() {
     const configs = await prisma.config.findMany({
       where: {
         key: {
-          in: ['HYPERPAY_ENTITY_ID', 'HYPERPAY_ACCESS_TOKEN', 'HYPERPAY_MODE', 'HYPERPAY_BRANDS']
+          in: ['hyperpay_entity_id', 'hyperpay_access_token', 'hyperpay_mode', 'hyperpay_brands']
         }
       }
     });
@@ -46,15 +77,15 @@ async function getHyperPayService() {
     const configMap = {};
     configs.forEach(c => configMap[c.key] = c.value);
     
-    if (!configMap.HYPERPAY_ENTITY_ID || !configMap.HYPERPAY_ACCESS_TOKEN) {
+    if (!configMap.hyperpay_entity_id || !configMap.hyperpay_access_token) {
       return null;
     }
     
     const hyperPayConfig = {
-      entityId: configMap.HYPERPAY_ENTITY_ID,
-      accessToken: configMap.HYPERPAY_ACCESS_TOKEN,
-      mode: configMap.HYPERPAY_MODE || 'test',
-      brands: (configMap.HYPERPAY_BRANDS || 'VISA,MASTER').split(',')
+      entityId: configMap.hyperpay_entity_id,
+      accessToken: configMap.hyperpay_access_token,
+      mode: configMap.hyperpay_mode || 'test',
+      brands: (configMap.hyperpay_brands || 'VISA,MASTER').split(',')
     };
     
     hyperPayService = new HyperPayService(hyperPayConfig);
@@ -66,6 +97,7 @@ async function getHyperPayService() {
 }
 
 app.use(cors());
+app.use(compression()); // Enable gzip compression
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 
@@ -223,79 +255,433 @@ app.use('/api', facebookTokenApi);
 app.use('/api', twitterProxyApi);
 app.use('/api', authApi);
 
-// Simplified Twitter post endpoint - handles OAuth server-side
+// Import rate limiter
+import twitterRateLimiter from './services/twitterRateLimiter.js';
+import { postTweetOAuth2 } from './services/twitterOAuth2.js';
+
+// Twitter OAuth 2.0 callback endpoint (no auth required)
+app.get('/api/twitter/oauth2/callback', async (req, res) => {
+  const { code, state, error } = req.query;
+  
+  if (error) {
+    console.error('OAuth 2.0 authorization error:', error);
+    return res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Authorization Failed</title>
+        <style>
+          body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
+          .error { background: #fee; border: 2px solid #f00; padding: 20px; border-radius: 8px; }
+          code { background: #f5f5f5; padding: 2px 6px; border-radius: 3px; }
+        </style>
+      </head>
+      <body>
+        <div class="error">
+          <h2>❌ Authorization Failed</h2>
+          <p>Error: ${error}</p>
+          <p>Please try again or check your Twitter Developer Portal settings.</p>
+        </div>
+      </body>
+      </html>
+    `);
+  }
+  
+  if (!code) {
+    return res.status(400).send('Missing authorization code');
+  }
+  
+  // Display the authorization code for manual token exchange
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Twitter OAuth 2.0 - Authorization Success</title>
+      <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+        .success { background: #e8f5e9; border: 2px solid #4caf50; padding: 20px; border-radius: 8px; }
+        .code-box { background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 15px 0; word-break: break-all; }
+        .command { background: #263238; color: #aed581; padding: 15px; border-radius: 5px; margin: 15px 0; font-family: monospace; }
+        .warning { background: #fff3cd; border: 2px solid #ffc107; padding: 15px; border-radius: 8px; margin: 15px 0; }
+        h3 { margin-top: 20px; color: #333; }
+        button { background: #4caf50; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; }
+        button:hover { background: #45a049; }
+      </style>
+    </head>
+    <body>
+      <div class="success">
+        <h2>✅ Authorization Successful!</h2>
+        <p>Twitter has authorized your app. Now complete the token exchange:</p>
+        
+        <h3>📋 Your Authorization Code:</h3>
+        <div class="code-box" id="authCode">${code}</div>
+        <button onclick="copyCode()">📋 Copy Code</button>
+        
+        <div class="warning">
+          <strong>⚠️ Important:</strong> This code expires in 30 seconds! Use it immediately.
+        </div>
+        
+        <h3>🚀 Next Step - Exchange for Access Token:</h3>
+        <div class="command">
+node scripts/getTwitterOAuth2Token.js ${code}
+        </div>
+        
+        <p>Run this command in your terminal to complete the setup.</p>
+      </div>
+      
+      <script>
+        function copyCode() {
+          const code = document.getElementById('authCode').textContent;
+          navigator.clipboard.writeText(code).then(() => {
+            alert('Code copied to clipboard!');
+          });
+        }
+      </script>
+    </body>
+    </html>
+  `);
+});
+
+// Twitter rate limit status endpoint
+app.get('/api/twitter/rate-limit-status', authenticateToken, async (req, res) => {
+  try {
+    // Check if user has permission to access Twitter rate limits
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Restrict Twitter access for free plan users and regular users (non-admin)
+    if (user.plan === 'free' || user.role !== 'admin') {
+      return res.status(403).json({ 
+        error: 'Twitter rate limit status is not available for your plan/role.',
+        planRequired: 'pro',
+        feature: 'Twitter access'
+      });
+    }
+    
+    const status = twitterRateLimiter.getStatus();
+    res.json(status);
+  } catch (error) {
+    console.error('Error checking Twitter rate limit status:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Meta (Facebook/Instagram) rate limit status endpoint
+app.get('/api/meta/rate-limit-status', authenticateToken, (req, res) => {
+  const status = metaRateLimiter.getStatus();
+  res.json(status);
+});
+
+// Improved Twitter post endpoint with OAuth 2.0 and 1.0a support
 app.post('/api/twitter/post', authenticateToken, async (req, res) => {
   console.log('=== /api/twitter/post endpoint hit ===');
   console.log('Request body:', req.body);
+  
   try {
-    const { text } = req.body;
+    // Check if user has permission to post to Twitter
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Restrict Twitter access for free plan users and regular users (non-admin)
+    if (user.plan === 'free' || user.role !== 'admin') {
+      return res.status(403).json({ 
+        error: 'Twitter posting is not available for your plan/role. Please upgrade to Pro or contact an administrator.',
+        planRequired: 'pro',
+        feature: 'Twitter posting'
+      });
+    }
+    
+    const { text, media, priority = 0 } = req.body;
     if (!text) {
       return res.status(400).json({ error: 'Missing tweet text' });
     }
 
     console.log('Tweet text:', text);
+    if (media) {
+      console.log('Media URL:', media);
+    }
 
-    // Get credentials from database
-    const configs = await prisma.config.findMany({
-      where: {
-        key: { in: ['x_api_key', 'x_api_secret', 'x_access_token', 'x_access_secret', 'twitter_api_url'] }
+    // Enqueue the request with rate limiting
+    const result = await twitterRateLimiter.enqueue(async () => {
+      // Get credentials from database
+      const configs = await prisma.config.findMany({
+        where: {
+          key: { 
+            in: [
+              'x_api_key', 'x_api_secret', 'x_access_token', 'x_access_secret',
+              'x_oauth2_client_id', 'x_oauth2_client_secret', 'x_oauth2_access_token',
+              'twitter_api_url', 'twitter_auth_method'
+            ] 
+          }
+        }
+      });
+      const creds = Object.fromEntries(configs.map(c => [c.key, c.value]));
+      
+      const authMethod = creds.twitter_auth_method || 'oauth1'; // Default to OAuth 1.0a
+      
+      // Try OAuth 2.0 first if configured (higher rate limits)
+      if (authMethod === 'oauth2' && creds.x_oauth2_access_token) {
+        console.log('Using OAuth 2.0 for tweet posting (higher rate limits)');
+        
+        try {
+          // Pass OAuth 1.0a credentials for media upload (media endpoint requires OAuth 1.0a)
+          const oauth1Creds = media ? {
+            apiKey: creds.x_api_key,
+            apiSecret: creds.x_api_secret,
+            accessToken: creds.x_access_token,
+            accessSecret: creds.x_access_secret
+          } : null;
+          
+          const data = await postTweetOAuth2(creds.x_oauth2_access_token, text, media, oauth1Creds);
+          return { ...data, authMethod: 'oauth2' };
+        } catch (oauth2Error) {
+          console.warn('OAuth 2.0 failed, falling back to OAuth 1.0a:', oauth2Error.message);
+          // Fall through to OAuth 1.0a
+        }
       }
-    });
-    const creds = Object.fromEntries(configs.map(c => [c.key, c.value]));
-    
-    if (!creds.x_api_key || !creds.x_api_secret || !creds.x_access_token || !creds.x_access_secret) {
-      return res.status(500).json({ error: 'Twitter credentials not configured' });
-    }
+      
+      // OAuth 1.0a implementation (fallback or default)
+      console.log('Using OAuth 1.0a for tweet posting');
+      
+      if (!creds.x_api_key || !creds.x_api_secret || !creds.x_access_token || !creds.x_access_secret) {
+        throw new Error('Twitter credentials not configured');
+      }
 
-    const twitterApiUrl = creds.twitter_api_url || 'https://api.twitter.com';
-    const url = `${twitterApiUrl}/2/tweets`;
+      const twitterApiUrl = creds.twitter_api_url || 'https://api.twitter.com';
+      
+      let mediaIds = [];
+      
+      // Upload media if provided (OAuth 1.0a)
+      if (media) {
+        try {
+          console.log('Uploading media using OAuth 1.0a...');
+          const https = await import('https');
+          const http = await import('http');
+          const FormData = (await import('form-data')).default;
+          
+          // Download image or convert data URL
+          let imageBuffer;
+          if (media.startsWith('data:')) {
+            // Handle data URLs (base64 encoded images from local uploads)
+            const base64Data = media.split(',')[1];
+            if (!base64Data) {
+              throw new Error('Invalid data URL format');
+            }
+            imageBuffer = Buffer.from(base64Data, 'base64');
+          } else {
+            // Download from HTTP/HTTPS URL
+            imageBuffer = await new Promise((resolve, reject) => {
+              const protocol = media.startsWith('https') ? https : http;
+              protocol.get(media, (response) => {
+                const chunks = [];
+                response.on('data', (chunk) => chunks.push(chunk));
+                response.on('end', () => resolve(Buffer.concat(chunks)));
+                response.on('error', reject);
+              });
+            });
+          }
+          
+          // Upload to Twitter
+          const uploadUrl = 'https://upload.twitter.com/1.1/media/upload.json';
+          const nonce = crypto.randomBytes(16).toString('hex');
+          const timestamp = Math.floor(Date.now() / 1000).toString();
 
-    // Generate OAuth 1.0a signature
-    const crypto = await import('crypto');
-    const nonce = crypto.randomBytes(16).toString('hex');
-    const timestamp = Math.floor(Date.now() / 1000).toString();
+          const oauthParams = {
+            oauth_consumer_key: creds.x_api_key,
+            oauth_token: creds.x_access_token,
+            oauth_nonce: nonce,
+            oauth_timestamp: timestamp,
+            oauth_signature_method: 'HMAC-SHA1',
+            oauth_version: '1.0',
+          };
 
-    const oauthParams = {
-      oauth_consumer_key: creds.x_api_key,
-      oauth_token: creds.x_access_token,
-      oauth_nonce: nonce,
-      oauth_timestamp: timestamp,
-      oauth_signature_method: 'HMAC-SHA1',
-      oauth_version: '1.0',
-    };
+          const rfc3986Encode = (str) => encodeURIComponent(str).replace(/[!*'()]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+          const paramString = Object.keys(oauthParams).sort().map(k => `${rfc3986Encode(k)}=${rfc3986Encode(oauthParams[k])}`).join('&');
+          const baseString = `POST&${rfc3986Encode(uploadUrl)}&${rfc3986Encode(paramString)}`;
+          const signingKey = `${rfc3986Encode(creds.x_api_secret)}&${rfc3986Encode(creds.x_access_secret)}`;
+          const signature = crypto.createHmac('sha1', signingKey).update(baseString).digest('base64');
+          oauthParams.oauth_signature = signature;
 
-    // Generate signature
-    const rfc3986Encode = (str) => encodeURIComponent(str).replace(/[!*'()]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
-    const paramString = Object.keys(oauthParams).sort().map(k => `${rfc3986Encode(k)}=${rfc3986Encode(oauthParams[k])}`).join('&');
-    const baseString = `POST&${rfc3986Encode(url)}&${rfc3986Encode(paramString)}`;
-    const signingKey = `${rfc3986Encode(creds.x_api_secret)}&${rfc3986Encode(creds.x_access_secret)}`;
-    const signature = crypto.createHmac('sha1', signingKey).update(baseString).digest('base64');
-    oauthParams.oauth_signature = signature;
+          const authHeader = 'OAuth ' + Object.keys(oauthParams).sort().map(k => `${rfc3986Encode(k)}="${rfc3986Encode(oauthParams[k])}"`).join(', ');
 
-    const authHeader = 'OAuth ' + Object.keys(oauthParams).sort().map(k => `${rfc3986Encode(k)}="${rfc3986Encode(oauthParams[k])}"`).join(', ');
+          const formData = new FormData();
+          formData.append('media', imageBuffer, { filename: 'image.jpg' });
 
-    // Post to Twitter
-    const fetch = (await import('node-fetch')).default;
-    const twitterRes = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': authHeader,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ text })
-    });
+          const fetch = (await import('node-fetch')).default;
+          const uploadRes = await fetch(uploadUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': authHeader,
+              ...formData.getHeaders()
+            },
+            body: formData
+          });
 
-    const data = await twitterRes.json();
-    
-    if (!twitterRes.ok) {
-      console.error('Twitter API Error:', data);
-      return res.status(twitterRes.status).json(data);
-    }
+          const uploadData = await uploadRes.json();
+          if (!uploadRes.ok) {
+            throw new Error(uploadData.errors?.[0]?.message || 'Media upload failed');
+          }
+          
+          mediaIds.push(uploadData.media_id_string);
+          console.log('Media uploaded successfully, media_id:', uploadData.media_id_string);
+        } catch (err) {
+          console.error('Failed to upload media:', err);
+          throw new Error(`Media upload failed: ${err.message}`);
+        }
+      }
+      
+      const url = `${twitterApiUrl}/2/tweets`;
 
-    res.status(201).json(data);
+      // Generate OAuth 1.0a signature
+      const nonce = crypto.randomBytes(16).toString('hex');
+      const timestamp = Math.floor(Date.now() / 1000).toString();
+
+      const oauthParams = {
+        oauth_consumer_key: creds.x_api_key,
+        oauth_token: creds.x_access_token,
+        oauth_nonce: nonce,
+        oauth_timestamp: timestamp,
+        oauth_signature_method: 'HMAC-SHA1',
+        oauth_version: '1.0',
+      };
+
+      // Generate signature
+      const rfc3986Encode = (str) => encodeURIComponent(str).replace(/[!*'()]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+      const paramString = Object.keys(oauthParams).sort().map(k => `${rfc3986Encode(k)}=${rfc3986Encode(oauthParams[k])}`).join('&');
+      const baseString = `POST&${rfc3986Encode(url)}&${rfc3986Encode(paramString)}`;
+      const signingKey = `${rfc3986Encode(creds.x_api_secret)}&${rfc3986Encode(creds.x_access_secret)}`;
+      const signature = crypto.createHmac('sha1', signingKey).update(baseString).digest('base64');
+      oauthParams.oauth_signature = signature;
+
+      const authHeader = 'OAuth ' + Object.keys(oauthParams).sort().map(k => `${rfc3986Encode(k)}="${rfc3986Encode(oauthParams[k])}"`).join(', ');
+
+      // Prepare tweet body
+      const tweetBody = { text };
+      if (mediaIds.length > 0) {
+        tweetBody.media = { media_ids: mediaIds };
+      }
+
+      // Post to Twitter
+      const fetch = (await import('node-fetch')).default;
+      const twitterRes = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': authHeader,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(tweetBody)
+      });
+
+      const data = await twitterRes.json();
+      
+      if (!twitterRes.ok) {
+        console.error('Twitter API Error:', data);
+        const error = new Error(data.detail || data.title || 'Twitter API error');
+        error.status = twitterRes.status;
+        error.headers = Object.fromEntries(twitterRes.headers.entries());
+        error.data = data;
+        
+        // Add rate limit info if it's a 429 error
+        if (twitterRes.status === 429) {
+          const headers = error.headers;
+          error.rateLimitInfo = {
+            userLimit: headers['x-user-limit-24hour-limit'],
+            userRemaining: headers['x-user-limit-24hour-remaining'],
+            userResetTimestamp: headers['x-user-limit-24hour-reset'],
+            appLimit: headers['x-app-limit-24hour-limit'],
+            appRemaining: headers['x-app-limit-24hour-remaining'],
+            appResetTimestamp: headers['x-app-limit-24hour-reset']
+          };
+        }
+        
+        throw error;
+      }
+
+      return { ...data, authMethod: 'oauth1' };
+    }, priority);
+
+    res.status(201).json(result);
   } catch (err) {
     console.error('Twitter post error:', err);
-    res.status(500).json({ error: err.message });
+    
+    // Better error messages for rate limiting
+    if (err.status === 429) {
+      // Calculate time until reset
+      const rateLimitInfo = err.rateLimitInfo || {};
+      const resetTimestamp = parseInt(rateLimitInfo.userResetTimestamp || rateLimitInfo.appResetTimestamp || '0');
+      const now = Math.floor(Date.now() / 1000);
+      const secondsUntilReset = resetTimestamp - now;
+      const hoursUntilReset = Math.ceil(secondsUntilReset / 3600);
+      const minutesUntilReset = Math.ceil(secondsUntilReset / 60);
+      
+      let timeMessage;
+      if (hoursUntilReset > 1) {
+        timeMessage = `${hoursUntilReset} hour${hoursUntilReset > 1 ? 's' : ''}`;
+      } else if (minutesUntilReset > 0) {
+        timeMessage = `${minutesUntilReset} minute${minutesUntilReset > 1 ? 's' : ''}`;
+      } else {
+        timeMessage = 'a few moments';
+      }
+      
+      // Send email notification about rate limit
+      console.log('🔍 Checking if we should send rate limit email...');
+      console.log('req.user exists:', !!req.user);
+      if (req.user) {
+        console.log('User email:', req.user.email);
+        console.log('User username:', req.user.username);
+        try {
+          console.log('📧 Attempting to send rate limit notification email...');
+          const errorMessage = `Twitter rate limit exceeded. Please try again in ${timeMessage}. (Limit: ${rateLimitInfo.userLimit || '17'} posts per 24 hours)`;
+          await emailService.sendPostFailedEmail(
+            req.user.email,
+            req.user.username,
+            {
+              platform: 'X (Twitter)',
+              content: text,
+              scheduledFor: new Date().toISOString()
+            },
+            errorMessage
+          );
+          console.log(`✅ Rate limit notification email sent to ${req.user.email}`);
+        } catch (emailError) {
+          console.error('❌ Failed to send rate limit notification email:', emailError.message);
+          console.error('Email error stack:', emailError.stack);
+        }
+      } else {
+        console.log('⚠️ No user found in request - skipping email notification');
+      }
+      
+      const status = twitterRateLimiter.getStatus();
+      return res.status(429).json({
+        error: 'Rate limit exceeded',
+        message: `You've reached your Twitter posting limit (${rateLimitInfo.userLimit || '17'} posts per 24 hours). Please try again in ${timeMessage}.`,
+        rateLimitInfo: {
+          limit: rateLimitInfo.userLimit || rateLimitInfo.appLimit,
+          remaining: rateLimitInfo.userRemaining || rateLimitInfo.appRemaining,
+          resetTime: resetTimestamp > 0 ? new Date(resetTimestamp * 1000).toLocaleString() : 'Unknown',
+          hoursUntilReset,
+          minutesUntilReset,
+          timeMessage
+        },
+        rateLimitStatus: status,
+        queuePosition: status.queueLength
+      });
+    }
+    
+    res.status(err.status || 500).json({ 
+      error: err.message,
+      details: err.data
+    });
   }
 });
 
@@ -387,6 +773,48 @@ app.get('/api/config/:key', authenticateToken, requireAdmin, async (req, res) =>
   }
 });
 
+// Get user-accessible config values (for regular users)
+app.get('/api/user-config/:key', authenticateToken, async (req, res) => {
+  const { key } = req.params;
+  try {
+    // Define which config keys regular users can access
+    const userAccessibleKeys = [
+      'auto_post_enabled',
+      'system_maintenance',
+      'max_posts_per_day',
+      'platform_status'
+    ];
+    
+    if (!userAccessibleKeys.includes(key)) {
+      return res.status(403).json({ error: 'Access denied to this configuration' });
+    }
+    
+    const config = await prisma.config.findUnique({
+      where: { key }
+    });
+    
+    if (!config) {
+      // Return default values for missing configs
+      const defaults = {
+        'auto_post_enabled': 'true',
+        'system_maintenance': 'false',
+        'max_posts_per_day': '10',
+        'platform_status': 'active'
+      };
+      
+      return res.json({ 
+        key, 
+        value: defaults[key] || 'not_set' 
+      });
+    }
+    
+    res.json(config);
+  } catch (err) {
+    console.error('Error fetching user config:', err);
+    res.status(500).json({ error: 'Failed to fetch config' });
+  }
+});
+
 app.delete('/api/config/:key', authenticateToken, requireAdmin, async (req, res) => {
   const { key } = req.params;
   try {
@@ -407,7 +835,7 @@ app.post('/api/brand-dna', authenticateToken, async (req, res) => {
     
     // Deduct credits if userId is provided
     if (userId) {
-      const creditCost = 50; // Cost for Brand DNA analysis
+      const creditCost = 30; // Cost for Brand DNA analysis
       
       // Check if user has enough credits
       const user = await prisma.user.findUnique({ where: { id: userId } });
@@ -551,7 +979,7 @@ app.post('/api/content-strategy', authenticateToken, async (req, res) => {
     
     // Deduct credits if userId is provided
     if (userId) {
-      const creditCost = 25; // Cost for Content Strategy generation
+      const creditCost = 50; // Cost for Content Strategy generation
       
       // Check if user has enough credits
       const user = await prisma.user.findUnique({ where: { id: userId } });
@@ -848,6 +1276,407 @@ app.post('/api/publish', authenticateToken, async (req, res) => {
     const { platform, content, metadata } = req.body;
     console.log('Publish request:', { platform, content, metadata });
     
+    // For Twitter, use the dedicated Twitter endpoint with rate limiting
+    if (platform === 'X (Twitter)' || platform === 'twitter') {
+      // Deduct credits if userId is provided
+      if (metadata?.userId) {
+        const userId = metadata.userId;
+        const creditCost = 30; // Cost for publishing content
+        
+        // Check if user has enough credits
+        const user = await prisma.user.findUnique({ where: { id: userId } });
+        if (!user) {
+          return res.status(404).json({ error: 'User not found' });
+        }
+        
+        if (user.credits < creditCost) {
+          return res.status(400).json({ 
+            error: 'Insufficient credits', 
+            required: creditCost,
+            available: user.credits 
+          });
+        }
+        
+        // Deduct credits first
+        const balanceBefore = user.credits;
+        const balanceAfter = user.credits - creditCost;
+        
+        await prisma.$transaction([
+          prisma.user.update({
+            where: { id: userId },
+            data: { credits: balanceAfter }
+          }),
+          prisma.creditTransaction.create({
+            data: {
+              userId,
+              amount: -creditCost,
+              action: 'content_publish',
+              description: `Published content to ${platform}`,
+              balanceBefore,
+              balanceAfter
+            }
+          })
+        ]);
+        
+        console.log(`Deducted ${creditCost} credits from user ${userId}. New balance: ${balanceAfter}`);
+      }
+      
+      // Use the Twitter endpoint with rate limiting
+      try {
+        const twitterResult = await twitterRateLimiter.enqueue(async () => {
+          // Get credentials from database
+          const configs = await prisma.config.findMany({
+            where: {
+              key: { 
+                in: [
+                  'x_api_key', 'x_api_secret', 'x_access_token', 'x_access_secret',
+                  'x_oauth2_client_id', 'x_oauth2_client_secret', 'x_oauth2_access_token',
+                  'twitter_api_url', 'twitter_auth_method'
+                ] 
+              }
+            }
+          });
+          const creds = Object.fromEntries(configs.map(c => [c.key, c.value]));
+          
+          const authMethod = creds.twitter_auth_method || 'oauth1';
+          
+          // Extract media URL from metadata if available
+          const mediaUrl = metadata?.imageUrl || metadata?.media;
+          
+          // Try OAuth 2.0 first if configured
+          if (authMethod === 'oauth2' && creds.x_oauth2_access_token) {
+            try {
+              // Pass OAuth 1.0a credentials for media upload (media endpoint requires OAuth 1.0a)
+              const oauth1Creds = mediaUrl ? {
+                apiKey: creds.x_api_key,
+                apiSecret: creds.x_api_secret,
+                accessToken: creds.x_access_token,
+                accessSecret: creds.x_access_secret
+              } : null;
+              
+              const data = await postTweetOAuth2(creds.x_oauth2_access_token, content, mediaUrl, oauth1Creds);
+              return { ...data, authMethod: 'oauth2' };
+            } catch (oauth2Error) {
+              console.warn('OAuth 2.0 failed, falling back to OAuth 1.0a:', oauth2Error.message);
+              // Fall through to OAuth 1.0a
+            }
+          }
+          
+          // OAuth 1.0a implementation
+          if (!creds.x_api_key || !creds.x_api_secret || !creds.x_access_token || !creds.x_access_secret) {
+            throw new Error('Twitter credentials not configured');
+          }
+
+          const twitterApiUrl = creds.twitter_api_url || 'https://api.twitter.com';
+          
+          let mediaIds = [];
+          
+          // Upload media if provided (OAuth 1.0a)
+          if (mediaUrl) {
+            try {
+              console.log('Uploading media using OAuth 1.0a...');
+              const https = await import('https');
+              const http = await import('http');
+              const FormData = (await import('form-data')).default;
+              
+              // Download image or convert data URL
+              let imageBuffer;
+              if (mediaUrl.startsWith('data:')) {
+                // Handle data URLs (base64 encoded images from local uploads)
+                const base64Data = mediaUrl.split(',')[1];
+                if (!base64Data) {
+                  throw new Error('Invalid data URL format');
+                }
+                imageBuffer = Buffer.from(base64Data, 'base64');
+              } else {
+                // Download from HTTP/HTTPS URL
+                imageBuffer = await new Promise((resolve, reject) => {
+                  const protocol = mediaUrl.startsWith('https') ? https : http;
+                  protocol.get(mediaUrl, (response) => {
+                    const chunks = [];
+                    response.on('data', (chunk) => chunks.push(chunk));
+                    response.on('end', () => resolve(Buffer.concat(chunks)));
+                    response.on('error', reject);
+                  });
+                });
+              }
+              
+              // Upload to Twitter
+              const uploadUrl = 'https://upload.twitter.com/1.1/media/upload.json';
+              const uploadNonce = crypto.randomBytes(16).toString('hex');
+              const uploadTimestamp = Math.floor(Date.now() / 1000).toString();
+
+              const uploadOauthParams = {
+                oauth_consumer_key: creds.x_api_key,
+                oauth_token: creds.x_access_token,
+                oauth_nonce: uploadNonce,
+                oauth_timestamp: uploadTimestamp,
+                oauth_signature_method: 'HMAC-SHA1',
+                oauth_version: '1.0',
+              };
+
+              const rfc3986Encode = (str) => encodeURIComponent(str).replace(/[!*'()]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+              const uploadParamString = Object.keys(uploadOauthParams).sort().map(k => `${rfc3986Encode(k)}=${rfc3986Encode(uploadOauthParams[k])}`).join('&');
+              const uploadBaseString = `POST&${rfc3986Encode(uploadUrl)}&${rfc3986Encode(uploadParamString)}`;
+              const uploadSigningKey = `${rfc3986Encode(creds.x_api_secret)}&${rfc3986Encode(creds.x_access_secret)}`;
+              const uploadSignature = crypto.createHmac('sha1', uploadSigningKey).update(uploadBaseString).digest('base64');
+              uploadOauthParams.oauth_signature = uploadSignature;
+
+              const uploadAuthHeader = 'OAuth ' + Object.keys(uploadOauthParams).sort().map(k => `${rfc3986Encode(k)}="${rfc3986Encode(uploadOauthParams[k])}"`).join(', ');
+
+              const formData = new FormData();
+              formData.append('media', imageBuffer, { filename: 'image.jpg' });
+
+              const fetch = (await import('node-fetch')).default;
+              const uploadRes = await fetch(uploadUrl, {
+                method: 'POST',
+                headers: {
+                  'Authorization': uploadAuthHeader,
+                  ...formData.getHeaders()
+                },
+                body: formData
+              });
+
+              const uploadData = await uploadRes.json();
+              if (!uploadRes.ok) {
+                throw new Error(uploadData.errors?.[0]?.message || 'Media upload failed');
+              }
+              
+              mediaIds.push(uploadData.media_id_string);
+              console.log('Media uploaded successfully, media_id:', uploadData.media_id_string);
+            } catch (err) {
+              console.error('Failed to upload media:', err);
+              throw new Error(`Media upload failed: ${err.message}`);
+            }
+          }
+          
+          const url = `${twitterApiUrl}/2/tweets`;
+
+          const nonce = crypto.randomBytes(16).toString('hex');
+          const timestamp = Math.floor(Date.now() / 1000).toString();
+
+          const oauthParams = {
+            oauth_consumer_key: creds.x_api_key,
+            oauth_token: creds.x_access_token,
+            oauth_nonce: nonce,
+            oauth_timestamp: timestamp,
+            oauth_signature_method: 'HMAC-SHA1',
+            oauth_version: '1.0',
+          };
+
+          const rfc3986Encode = (str) => encodeURIComponent(str).replace(/[!*'()]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+          const paramString = Object.keys(oauthParams).sort().map(k => `${rfc3986Encode(k)}=${rfc3986Encode(oauthParams[k])}`).join('&');
+          const baseString = `POST&${rfc3986Encode(url)}&${rfc3986Encode(paramString)}`;
+          const signingKey = `${rfc3986Encode(creds.x_api_secret)}&${rfc3986Encode(creds.x_access_secret)}`;
+          const signature = crypto.createHmac('sha1', signingKey).update(baseString).digest('base64');
+          oauthParams.oauth_signature = signature;
+
+          const authHeader = 'OAuth ' + Object.keys(oauthParams).sort().map(k => `${rfc3986Encode(k)}="${rfc3986Encode(oauthParams[k])}"`).join(', ');
+
+          // Prepare tweet body
+          const tweetBody = { text: content };
+          if (mediaIds.length > 0) {
+            tweetBody.media = { media_ids: mediaIds };
+          }
+
+          const fetch = (await import('node-fetch')).default;
+          const twitterRes = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'Authorization': authHeader,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(tweetBody)
+          });
+
+          const data = await twitterRes.json();
+          
+          if (!twitterRes.ok) {
+            const error = new Error(data.detail || data.title || 'Twitter API error');
+            error.status = twitterRes.status;
+            error.headers = Object.fromEntries(twitterRes.headers.entries());
+            error.data = data;
+            
+            // Add rate limit info if it's a 429 error
+            if (twitterRes.status === 429) {
+              const headers = error.headers;
+              error.rateLimitInfo = {
+                userLimit: headers['x-user-limit-24hour-limit'],
+                userRemaining: headers['x-user-limit-24hour-remaining'],
+                userResetTimestamp: headers['x-user-limit-24hour-reset'],
+                appLimit: headers['x-app-limit-24hour-limit'],
+                appRemaining: headers['x-app-limit-24hour-remaining'],
+                appResetTimestamp: headers['x-app-limit-24hour-reset']
+              };
+            }
+            
+            throw error;
+          }
+
+          return { ...data, authMethod: 'oauth1' };
+        }, 0);
+        
+        console.log('Twitter post result:', JSON.stringify(twitterResult, null, 2));
+        
+        // twitterResult structure: { data: { id, text }, authMethod }
+        const tweetId = twitterResult.data?.id;
+        
+        if (metadata?.userId) {
+          const user = await prisma.user.findUnique({ where: { id: metadata.userId } });
+          return res.json({ 
+            status: 201, 
+            id: tweetId, 
+            url: `https://twitter.com/user/status/${tweetId}`,
+            credits: user.credits 
+          });
+        }
+        
+        return res.json({ 
+          status: 201, 
+          id: tweetId, 
+          url: `https://twitter.com/user/status/${tweetId}` 
+        });
+      } catch (err) {
+        // Fetch user at the beginning so it's available in all error handlers
+        let user = null;
+        if (metadata?.userId) {
+          user = await prisma.user.findUnique({ where: { id: metadata.userId } });
+        }
+        
+        // Refund credits if userId was provided
+        if (metadata?.userId) {
+          const userId = metadata.userId;
+          const creditCost = 30;
+          const balanceBefore = user.credits;
+          const balanceAfter = user.credits + creditCost;
+          
+          await prisma.$transaction([
+            prisma.user.update({
+              where: { id: userId },
+              data: { credits: balanceAfter }
+            }),
+            prisma.creditTransaction.create({
+              data: {
+                userId,
+                amount: creditCost,
+                action: 'refund_publish_failed',
+                description: `Refund: Publishing to ${platform} failed - ${err.message}`,
+                balanceBefore,
+                balanceAfter
+              }
+            })
+          ]);
+          
+          console.log(`Refunded ${creditCost} credits to user ${userId}. Balance restored to: ${balanceAfter}`);
+          
+          // Send email notification about posting failure (but not for rate limits - handled separately)
+          if (err.status !== 429) {
+            try {
+              await emailService.sendPostFailedEmail(
+                user.email,
+                user.username,
+                {
+                  platform,
+                  content,
+                  scheduledFor: new Date().toISOString()
+                },
+                err.message
+              );
+              console.log(`📧 Failure notification email sent to ${user.email}`);
+            } catch (emailError) {
+              console.error('Failed to send failure notification email:', emailError.message);
+              // Don't block the response if email fails
+            }
+          }
+        }
+        
+        // Handle rate limit errors specially
+        if (err.status === 429) {
+          let resetTimestamp, secondsUntilReset, hoursUntilReset, minutesUntilReset, timeMessage;
+          
+          // Check if we have rate limit info from the error
+          if (err.rateLimitInfo) {
+            // From rate limiter immediate rejection
+            if (err.rateLimitInfo.secondsUntilReset) {
+              secondsUntilReset = err.rateLimitInfo.secondsUntilReset;
+            }
+            // From Twitter API headers
+            else if (err.rateLimitInfo.userResetTimestamp || err.rateLimitInfo.appResetTimestamp) {
+              resetTimestamp = parseInt(err.rateLimitInfo.userResetTimestamp || err.rateLimitInfo.appResetTimestamp || '0');
+              const now = Math.floor(Date.now() / 1000);
+              secondsUntilReset = resetTimestamp - now;
+            }
+          }
+          
+          // Calculate friendly time message
+          if (secondsUntilReset > 0) {
+            hoursUntilReset = Math.ceil(secondsUntilReset / 3600);
+            minutesUntilReset = Math.ceil(secondsUntilReset / 60);
+            
+            if (hoursUntilReset > 1) {
+              timeMessage = `${hoursUntilReset} hour${hoursUntilReset > 1 ? 's' : ''}`;
+            } else if (minutesUntilReset > 0) {
+              timeMessage = `${minutesUntilReset} minute${minutesUntilReset > 1 ? 's' : ''}`;
+            } else {
+              timeMessage = 'a few moments';
+            }
+          } else {
+            timeMessage = 'a few moments';
+          }
+          
+          // Send email notification about rate limit
+          console.log('🔍 Checking if we should send rate limit email...');
+          console.log('user exists:', !!user);
+          if (user) {
+            console.log('User email:', user.email);
+            console.log('User username:', user.username);
+            try {
+              console.log('📧 Attempting to send rate limit notification email...');
+              const errorMessage = `Twitter rate limit exceeded. Please try again in ${timeMessage}. (Limit: 17 posts per 24 hours)`;
+              await emailService.sendPostFailedEmail(
+                user.email,
+                user.username,
+                {
+                  platform,
+                  content,
+                  scheduledFor: new Date().toISOString()
+                },
+                errorMessage
+              );
+              console.log(`✅ Rate limit notification email sent to ${user.email}`);
+            } catch (emailError) {
+              console.error('❌ Failed to send rate limit notification email:', emailError.message);
+              console.error('Email error stack:', emailError.stack);
+            }
+          } else {
+            console.log('⚠️ No user found - skipping email notification');
+          }
+          
+          return res.status(429).json({
+            error: 'Rate limit exceeded',
+            message: `You've reached your Twitter posting limit (17 posts per 24 hours). Please try again in ${timeMessage}.`,
+            rateLimitInfo: {
+              limit: err.rateLimitInfo?.userLimit || err.rateLimitInfo?.appLimit || '17',
+              remaining: err.rateLimitInfo?.userRemaining || err.rateLimitInfo?.appRemaining || '0',
+              resetTime: err.rateLimitInfo?.resetTime || (resetTimestamp > 0 ? new Date(resetTimestamp * 1000).toLocaleString() : 'Unknown'),
+              hoursUntilReset: hoursUntilReset || 0,
+              minutesUntilReset: minutesUntilReset || 0,
+              timeMessage
+            },
+            refunded: metadata?.userId ? true : false,
+            credits: metadata?.userId ? (await prisma.user.findUnique({ where: { id: metadata.userId } })).credits : undefined
+          });
+        }
+        
+        return res.status(err.status || 500).json({ 
+          error: err.message,
+          refunded: metadata?.userId ? true : false,
+          credits: metadata?.userId ? (await prisma.user.findUnique({ where: { id: metadata.userId } })).credits : undefined
+        });
+      }
+    }
+    
+    // For other platforms, use the original geminiServer.publishToPlatform
     // Deduct credits if userId is provided
     if (metadata?.userId) {
       const userId = metadata.userId;
@@ -892,7 +1721,11 @@ app.post('/api/publish', authenticateToken, async (req, res) => {
       
       // Try to publish - if it fails, refund the credits
       try {
-        const result = await geminiServer.publishToPlatform(platform, content, metadata);
+        // Wrap Meta platform requests with rate limiter
+        const result = await metaRateLimiter.enqueue(async () => {
+          return await geminiServer.publishToPlatform(platform, content, metadata);
+        }, 0);
+        
         return res.json({ ...result, credits: balanceAfter });
       } catch (publishError) {
         console.error('Publishing failed, refunding credits:', publishError);
@@ -916,6 +1749,95 @@ app.post('/api/publish', authenticateToken, async (req, res) => {
         ]);
         
         console.log(`Refunded ${creditCost} credits to user ${userId}. Balance restored to: ${balanceBefore}`);
+        
+        // Send email notification about posting failure (skip for rate limits - handled separately)
+        if (!publishError.isRateLimitError) {
+          try {
+            await emailService.sendPostFailedEmail(
+              user.email,
+              user.username,
+              {
+                platform,
+                content,
+                scheduledFor: new Date().toISOString()
+              },
+              publishError.message
+            );
+            console.log(`📧 Failure notification email sent to ${user.email}`);
+          } catch (emailError) {
+            console.error('Failed to send failure notification email:', emailError.message);
+            // Don't block the response if email fails
+          }
+        }
+        
+        // Handle Meta rate limit errors specially
+        if (publishError.isRateLimitError) {
+          const rateLimitInfo = publishError.rateLimitInfo || {};
+          let secondsUntilReset, timeMessage;
+          
+          // Get reset time from rate limiter or error
+          if (rateLimitInfo.secondsUntilReset) {
+            secondsUntilReset = rateLimitInfo.secondsUntilReset;
+          } else if (rateLimitInfo.estimatedTimeToRegain) {
+            secondsUntilReset = rateLimitInfo.estimatedTimeToRegain * 60; // Convert minutes to seconds
+          } else {
+            secondsUntilReset = 60 * 60; // Default to 60 minutes
+          }
+          
+          const hoursUntilReset = Math.ceil(secondsUntilReset / 3600);
+          const minutesUntilReset = Math.ceil(secondsUntilReset / 60);
+          
+          if (hoursUntilReset > 1) {
+            timeMessage = `${hoursUntilReset} hour${hoursUntilReset > 1 ? 's' : ''}`;
+          } else if (minutesUntilReset > 0) {
+            timeMessage = `${minutesUntilReset} minute${minutesUntilReset > 1 ? 's' : ''}`;
+          } else {
+            timeMessage = 'a few moments';
+          }
+          
+          // Send email notification about rate limit
+          console.log('🔍 Checking if we should send rate limit email...');
+          console.log('user exists:', !!user);
+          if (user) {
+            console.log('User email:', user.email);
+            console.log('User username:', user.username);
+            try {
+              console.log('📧 Attempting to send rate limit notification email...');
+              const errorMessage = `${platform} rate limit exceeded. Please try again in ${timeMessage}. (Error code: ${rateLimitInfo.errorCode || 'Unknown'})`;
+              await emailService.sendPostFailedEmail(
+                user.email,
+                user.username,
+                {
+                  platform,
+                  content,
+                  scheduledFor: new Date().toISOString()
+                },
+                errorMessage
+              );
+              console.log(`✅ Rate limit notification email sent to ${user.email}`);
+            } catch (emailError) {
+              console.error('❌ Failed to send rate limit notification email:', emailError.message);
+              console.error('Email error stack:', emailError.stack);
+            }
+          } else {
+            console.log('⚠️ No user found - skipping email notification');
+          }
+          
+          return res.status(429).json({
+            error: 'Rate limit exceeded',
+            message: `You've reached your ${platform} posting limit. Please try again in ${timeMessage}.`,
+            rateLimitInfo: {
+              errorCode: rateLimitInfo.errorCode,
+              errorMessage: rateLimitInfo.errorMessage,
+              estimatedTimeToRegain: rateLimitInfo.estimatedTimeToRegain,
+              resetTime: rateLimitInfo.resetTime,
+              timeMessage
+            },
+            refunded: true,
+            credits: balanceBefore
+          });
+        }
+        
         return res.status(500).json({ 
           error: publishError.message || 'Publishing failed',
           refunded: true,
@@ -925,7 +1847,9 @@ app.post('/api/publish', authenticateToken, async (req, res) => {
     }
     
     // No userId provided, publish without credits
-    const result = await geminiServer.publishToPlatform(platform, content, metadata);
+    const result = await metaRateLimiter.enqueue(async () => {
+      return await geminiServer.publishToPlatform(platform, content, metadata);
+    }, 0);
     res.json(result);
   } catch (error) {
     console.error('Publish error:', error);
@@ -1134,6 +2058,17 @@ app.get('/api/posts/:userId', authenticateToken, async (req, res) => {
   }
 });
 
+// GET user's own posts (for regular users in dashboard)
+app.get('/api/posts', authenticateToken, async (req, res) => {
+  try {
+    const result = await geminiServer.getUserPosts(req.user.id);
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching user posts:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Update post status
 app.patch('/api/posts/:postId', authenticateToken, async (req, res) => {
   try {
@@ -1240,12 +2175,30 @@ app.get('/api/logs/:userId', authenticateToken, async (req, res) => {
   }
 });
 
-// Email logs endpoint for admin panel
-app.get('/api/email-logs', authenticateToken, requireAdmin, async (req, res) => {
+// Email logs endpoint - accessible to business+ users
+app.get('/api/email-logs', authenticateToken, async (req, res) => {
   try {
     const { limit = '50', status, type } = req.query;
+    const userId = req.user.id;
+    const userRole = req.user.role;
     
+    // Build where clause
     const where = {};
+    
+    // If not admin, only show their own email logs
+    if (userRole !== 'admin') {
+      // Find user's email for filtering
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { email: true }
+      });
+      
+      if (user) {
+        where.recipient = user.email;
+      }
+    }
+    
+    // Apply filters
     if (status) where.status = status;
     if (type) where.type = type;
     
@@ -1255,8 +2208,10 @@ app.get('/api/email-logs', authenticateToken, requireAdmin, async (req, res) => 
       take: parseInt(limit)
     });
     
-    // Get statistics
+    // Get statistics for the filtered logs
+    const statsWhere = userRole !== 'admin' ? { recipient: where.recipient } : {};
     const stats = await prisma.emailLog.groupBy({
+      where: statsWhere,
       by: ['status'],
       _count: true
     });
@@ -1318,9 +2273,9 @@ app.post('/api/users', async (req, res) => {
     
     // Plan credit limits
     const planLimits = {
-      free: 1000,
-      pro: 10000,
-      business: 50000,
+      free: 300,
+      pro: 1000,
+      business: 10000,
       enterprise: 100000
     };
     
@@ -1344,6 +2299,17 @@ app.post('/api/users', async (req, res) => {
     
     if (existingUser) {
       return res.status(400).json({ error: 'Username already exists' });
+    }
+
+    // Check if email already exists (if email is provided)
+    if (email) {
+      const existingEmailUser = await prisma.user.findFirst({
+        where: { email: email }
+      });
+      
+      if (existingEmailUser) {
+        return res.status(400).json({ error: 'Email address already exists' });
+      }
     }
     
     // Hash password using SHA-256 (same as login)
@@ -1392,6 +2358,31 @@ app.post('/api/users', async (req, res) => {
     });
     
     console.log(`✅ User created: ${newUser.username} (${newUser.id}) - ${newUser.role} / ${newUser.plan} - ${newUser.credits}/${newUser.maxCredits} credits`);
+    
+    // Send welcome email if email is provided
+    if (newUser.email) {
+      try {
+        console.log(`📧 Sending welcome email to ${newUser.email}...`);
+        const emailResult = await emailService.sendWelcomeEmail(
+          newUser.email, 
+          newUser.username, 
+          password, // Send plain password in welcome email
+          newUser.plan
+        );
+        
+        if (emailResult.success) {
+          console.log(`✅ Welcome email sent successfully to ${newUser.email}`);
+        } else {
+          console.log(`⚠️  Welcome email failed: ${emailResult.reason}`);
+        }
+      } catch (emailError) {
+        console.error(`❌ Error sending welcome email to ${newUser.email}:`, emailError.message);
+        // Don't fail user creation if email fails
+      }
+    } else {
+      console.log('⏭️  No email provided - skipping welcome email');
+    }
+    
     res.status(201).json(newUser);
   } catch (error) {
     console.error('Error creating user:', error);
@@ -1407,9 +2398,9 @@ app.patch('/api/users/:userId', authenticateToken, requireAdmin, async (req, res
     
     // Plan credit limits
     const planLimits = {
-      free: 1000,
-      pro: 10000,
-      business: 50000,
+      free: 300,
+      pro: 1000,
+      business: 10000,
       enterprise: 100000
     };
     
@@ -1424,8 +2415,38 @@ app.patch('/api/users/:userId', authenticateToken, requireAdmin, async (req, res
     }
     
     const updateData = {};
-    if (username !== undefined) updateData.username = username;
-    if (email !== undefined) updateData.email = email || null;
+    
+    // Check username uniqueness if username is being updated
+    if (username !== undefined) {
+      const existingUser = await prisma.user.findFirst({
+        where: { 
+          username: username,
+          id: { not: userId } // Exclude current user from check
+        }
+      });
+      
+      if (existingUser) {
+        return res.status(400).json({ error: 'Username already exists' });
+      }
+      updateData.username = username;
+    }
+    
+    // Check email uniqueness if email is being updated
+    if (email !== undefined) {
+      if (email) { // Only check if email is not null/empty
+        const existingEmailUser = await prisma.user.findFirst({
+          where: { 
+            email: email,
+            id: { not: userId } // Exclude current user from check
+          }
+        });
+        
+        if (existingEmailUser) {
+          return res.status(400).json({ error: 'Email address already exists' });
+        }
+      }
+      updateData.email = email || null;
+    }
     if (role !== undefined) {
       if (!['admin', 'user'].includes(role)) {
         return res.status(400).json({ error: 'Invalid role. Must be admin or user.' });
@@ -1677,9 +2698,9 @@ app.post('/api/user/upgrade-plan', authenticateToken, async (req, res) => {
     }
     
     const planCredits = {
-      free: 1000,
-      pro: 10000,
-      business: 50000,
+      free: 300,
+      pro: 1000,
+      business: 10000,
       enterprise: 999999
     };
     
@@ -2012,9 +3033,9 @@ app.get('/api/payment/verify/:checkoutId', authenticateToken, async (req, res) =
       
       if (subscription) {
         const planCredits = {
-          free: 1000,
-          pro: 10000,
-          business: 50000,
+          free: 300,
+          pro: 1000,
+          business: 10000,
           enterprise: 999999
         };
         
@@ -2222,9 +3243,9 @@ app.post('/api/webhooks/hyperpay', async (req, res) => {
       
       if (subscription) {
         const planCredits = {
-          free: 1000,
-          pro: 10000,
-          business: 50000,
+          free: 300,
+          pro: 1000,
+          business: 10000,
           enterprise: 999999
         };
         

@@ -1,5 +1,4 @@
 import express from 'express';
-import bodyParser from 'body-parser';
 import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
 

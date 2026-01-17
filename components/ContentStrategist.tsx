@@ -1,8 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { Compass, Calendar, Target, Zap, Loader2, ArrowRight } from 'lucide-react';
+import { Compass, Loader2, Zap, Calendar, Target, ArrowRight } from 'lucide-react';
 import { generateContentStrategy } from '../services/gemini.client';
-import { deductCredits } from '../services/creditService';
 import { canUseFeature, CREDIT_COSTS } from '../services/planService';
 import { BrandDNA, ContentStrategy, ActiveTab } from '../types';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
@@ -98,7 +97,7 @@ const ContentStrategist: React.FC<ContentStrategistProps> = ({ dna, onNavigate, 
       }
 
       console.log('🚀 No existing strategy found, generating new Content Strategy with userId:', userId);
-      const strategyResult = await generateContentStrategy(dna, userId);
+      const strategyResult = await generateContentStrategy(dna, userId) as any;
       console.log('✅ Content strategy received:', strategyResult);
       
       // Handle response based on whether it includes credit info

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CSS Cache Buster Test</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+    <script>
+        // Force clear browser cache and reload
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                for(let registration of registrations) {
+                    registration.unregister();
+                }
+            });
+        }
+        
+        // Clear local storage
+        localStorage.clear();
+        sessionStorage.clear();
+        
+        // Force reload with cache bypass
+        setTimeout(() => {
+            window.location.href = 'http://localhost:5173/?cachebuster=' + Date.now();
+        }, 1000);
+    </script>
+    
+    <div style="padding: 20px; text-align: center; font-family: Arial, sans-serif;">
+        <h2>🔄 Clearing Browser Cache...</h2>
+        <p>Redirecting to your application with fresh cache in 1 second...</p>
+        <p style="font-size: 12px; color: #666;">
+            This will ensure you see the latest HyperPay styling changes.
+        </p>
+    </div>
+</body>
+</html>

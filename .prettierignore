@@ -1,0 +1,12 @@
+node_modules
+dist
+build
+coverage
+.vite
+*.min.js
+*.min.css
+package-lock.json
+prisma/migrations
+*.log
+.env
+.env.local

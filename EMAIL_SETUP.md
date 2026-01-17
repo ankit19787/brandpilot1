@@ -145,16 +145,16 @@ All emails include:
 Email configuration is stored in the `Config` table:
 
 ```sql
-SELECT * FROM "Config" WHERE key LIKE 'EMAIL_%';
+SELECT * FROM "Config" WHERE key LIKE 'email_%';
 ```
 
 Keys:
-- `EMAIL_HOST` - SMTP server
-- `EMAIL_PORT` - SMTP port
-- `EMAIL_SECURE` - SSL enabled (true/false)
-- `EMAIL_USER` - Account username
-- `EMAIL_PASS` - Account password (encrypted in production)
-- `EMAIL_FROM` - From address
+- `email_host` - SMTP server
+- `email_port` - SMTP port
+- `email_secure` - SSL enabled (true/false)
+- `email_user` - Account username
+- `email_pass` - Account password (encrypted in production)
+- `email_from` - From address
 
 ## Security Notes
 

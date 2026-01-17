@@ -40,6 +40,18 @@ const PlatformResponses: React.FC<PlatformResponsesProps> = ({ onAction, auth })
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [selectedPlatform, setSelectedPlatform] = useState<string>('all');
   const [showResponseDetails, setShowResponseDetails] = useState<{ [key: string]: boolean }>({});
+  const [userRole, setUserRole] = useState('user');
+
+  // Get user role from localStorage
+  useEffect(() => {
+    try {
+      const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+      setUserRole(authData.user?.role || 'user');
+    } catch (error) {
+      console.error('Error reading auth data:', error);
+      setUserRole('user');
+    }
+  }, []);
 
   // Normalize platform names for consistent display and filtering
   const normalizePlatform = (platform: string): string => {
@@ -68,7 +80,7 @@ const PlatformResponses: React.FC<PlatformResponsesProps> = ({ onAction, auth })
       if (authData.token) {
         headers['Authorization'] = `Bearer ${authData.token}`;
       }
-      const response = await fetch('/api/posts/all', { headers });
+      const response = await fetch('/api/posts', { headers });
       if (!response.ok) throw new Error('Failed to fetch posts');
       
       const posts = await response.json();
@@ -87,7 +99,7 @@ const PlatformResponses: React.FC<PlatformResponsesProps> = ({ onAction, auth })
 
   useEffect(() => {
     fetchResponses();
-  }, []);
+  }, [userRole]); // Refetch when user role changes
 
   const toggleResponseDetails = (postId: string) => {
     setShowResponseDetails(prev => ({
@@ -144,8 +156,15 @@ const PlatformResponses: React.FC<PlatformResponsesProps> = ({ onAction, auth })
     return statusMatch && platformMatch;
   });
 
-  const platforms = [...new Set(responses.map(r => r.platform))];
-  const statuses = [...new Set(responses.map(r => r.status))];
+  // Filter platforms to exclude Twitter for non-admin users
+  const allPlatforms = [...new Set(responses.map(r => r.platform))];
+  const platforms = userRole === 'admin' 
+    ? allPlatforms 
+    : allPlatforms.filter(platform => {
+        const normalized = platform.toLowerCase();
+        return !normalized.includes('twitter') && normalized !== 'x' && !normalized.includes('x (');
+      });
+  const statuses = [...new Set(responses.map(r => r.status))] as string[];
 
   if (loading) {
     return (

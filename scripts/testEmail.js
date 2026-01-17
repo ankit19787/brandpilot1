@@ -10,7 +10,7 @@ async function testEmail() {
     // Get email configuration
     const configs = await prisma.config.findMany({
       where: {
-        key: { in: ['EMAIL_HOST', 'EMAIL_PORT', 'EMAIL_USER', 'EMAIL_FROM'] }
+        key: { in: ['email_host', 'email_port', 'email_user', 'email_from'] }
       }
     });
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 const BACKEND_API_URL = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:3001';
 import { 
@@ -11,20 +11,17 @@ import {
   Info, 
   CheckCircle2, 
   AlertCircle,
-  // Linkedin, (removed)
   Twitter,
-  // Youtube, (removed)
   Instagram,
   ChevronRight,
   Database,
   RefreshCw,
-  // MessageCircle, (removed)
   Loader2,
   Facebook,
   Code2,
-  Copy,
   Terminal,
   Layers,
+  Copy,
   Mail
 } from 'lucide-react';
 
@@ -42,6 +39,19 @@ interface PlatformCreds {
 }
 
 const Credentials: React.FC<CredentialsProps> = ({ onAction }) => {
+  const [userRole, setUserRole] = useState('user');
+  
+  // Get user role from localStorage
+  useEffect(() => {
+    try {
+      const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+      setUserRole(authData.user?.role || 'user');
+    } catch (error) {
+      console.error('Error reading auth data:', error);
+      setUserRole('user');
+    }
+  }, []);
+
   const getAuthHeaders = () => {
     const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
     return {
@@ -189,10 +199,14 @@ const Credentials: React.FC<CredentialsProps> = ({ onAction }) => {
           });
         });
         
-        setPlatforms(Object.values(platformMap));
+        // Filter platforms based on user role - hide Twitter for non-admin users
+        const filteredPlatforms = Object.values(platformMap).filter(platform => 
+          userRole === 'admin' || platform.id !== 'x'
+        );
+        setPlatforms(filteredPlatforms);
       } catch (err) {
         // If backend not available, show empty platform templates
-        setPlatforms([
+        const defaultPlatforms = [
           {
             id: 'x',
             name: 'X (Twitter)',
@@ -217,30 +231,94 @@ const Credentials: React.FC<CredentialsProps> = ({ onAction }) => {
             isConfigured: false,
             fields: []
           }
+        ];
+        
+        // Filter default platforms based on user role
+        const filteredDefaultPlatforms = defaultPlatforms.filter(platform => 
+          userRole === 'admin' || platform.id !== 'x'
+        );
+        setPlatforms(filteredDefaultPlatforms);
+          },
+          {
+            id: 'instagram',
+            name: 'Instagram',
+            icon: Instagram,
+            color: 'text-pink-600',
+            isConfigured: false,
+            fields: []
+          }
         ]);
       }
     }
     fetchCredentials();
-  }, []);
+  }, [userRole]); // Reload when user role changes
 
   const activePlatform = platforms.find(p => p.id === selectedPlatform);
 
   const getSnippets = () => {
-    if (selectedPlatform === 'x') {
+    const platform = platforms.find(p => p.id === selectedPlatform);
+    
+    if (selectedPlatform === 'x' && platform) {
+      const apiKey = platform.fields.find(f => f.key === 'x_api_key')?.value || 'YOUR_API_KEY';
+      const apiSecret = platform.fields.find(f => f.key === 'x_api_secret')?.value || 'YOUR_API_SECRET';
+      const accessToken = platform.fields.find(f => f.key === 'x_access_token')?.value || 'YOUR_ACCESS_TOKEN';
+      const accessSecret = platform.fields.find(f => f.key === 'x_access_secret')?.value || 'YOUR_ACCESS_SECRET';
       const timestamp = Math.floor(Date.now()/1000);
+      
       return {
         curl: `curl --location 'https://api.twitter.com/2/tweets' \\
 --header 'Content-Type: application/json' \\
---header 'Authorization: OAuth oauth_consumer_key="${X_API_KEY}",oauth_token="${X_ACCESS_TOKEN}",oauth_signature_method="HMAC-SHA1",oauth_timestamp="${timestamp}",oauth_nonce="nonce_string",oauth_version="1.0",oauth_signature="SIMULATED_SIGNATURE"' \\
+--header 'Authorization: OAuth oauth_consumer_key="${apiKey}",oauth_token="${accessToken}",oauth_signature_method="HMAC-SHA1",oauth_timestamp="${timestamp}",oauth_nonce="nonce_string",oauth_version="1.0",oauth_signature="SIMULATED_SIGNATURE"' \\
 --data '{"text": "Hello from X — OAuth 1.0a is live 🚀"}'`,
         js: `// Asynchronous OAuth 1.0a Logic for Browser (SubtleCrypto)
 const generateSignature = async (params) => {
-  const signingKey = encode("${X_API_SECRET}") + "&" + encode("${X_ACCESS_SECRET}");
+  const signingKey = encode("${apiSecret}") + "&" + encode("${accessSecret}");
   // SubtleCrypto logic implemented in BrandPilot core...
 };`
       };
     }
-    return { curl: 'Snippet loading...', js: 'Snippet loading...' };
+    
+    if (selectedPlatform === 'facebook' && platform) {
+      const pageId = platform.fields.find(f => f.key === 'fb_page_id')?.value || 'YOUR_PAGE_ID';
+      const token = platform.fields.find(f => f.key === 'fb_token')?.value || 'YOUR_ACCESS_TOKEN';
+      
+      return {
+        curl: `curl --location 'https://graph.facebook.com/v20.0/${pageId}/feed' \\
+--header 'Content-Type: application/json' \\
+--data '{"message": "Hello from Facebook!", "access_token": "${token}"}'`,
+        js: `// Facebook Graph API Post
+const postToFacebook = async (message) => {
+  const response = await fetch('https://graph.facebook.com/v20.0/${pageId}/feed', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, access_token: '${token}' })
+  });
+  return response.json();
+};`
+      };
+    }
+    
+    if (selectedPlatform === 'instagram' && platform) {
+      const accountId = platform.fields.find(f => f.key === 'ig_account_id')?.value || 'YOUR_ACCOUNT_ID';
+      const token = platform.fields.find(f => f.key === 'ig_access_token')?.value || 'YOUR_ACCESS_TOKEN';
+      
+      return {
+        curl: `curl --location 'https://graph.facebook.com/v20.0/${accountId}/media' \\
+--header 'Content-Type: application/json' \\
+--data '{"image_url": "https://example.com/image.jpg", "caption": "Hello from Instagram!", "access_token": "${token}"}'`,
+        js: `// Instagram Graph API Post
+const postToInstagram = async (imageUrl, caption) => {
+  const response = await fetch('https://graph.facebook.com/v20.0/${accountId}/media', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image_url: imageUrl, caption, access_token: '${token}' })
+  });
+  return response.json();
+};`
+      };
+    }
+    
+    return { curl: 'Select a platform to view API snippets...', js: 'Select a platform to view API snippets...' };
   };
 
   const copyToClipboard = (text: string) => {
@@ -301,9 +379,16 @@ const generateSignature = async (params) => {
   const handleRefreshFacebookToken = async () => {
     // Use the current value from the form
     const facebookPlatform = platforms.find(p => p.id === 'facebook');
-    const tokenField = facebookPlatform?.fields.find(f => f.key === 'fb_token');
+    const tokenField = facebookPlatform?.fields.find(f => 
+      f.key === 'facebook_token' || f.key === 'fb_token'
+    );
     const newToken = tokenField?.value;
-    if (!newToken) return;
+    
+    if (!newToken) {
+      onAction('Please enter a Facebook token first.', 'info');
+      return;
+    }
+    
     try {
       const res = await fetch(`${BACKEND_API_URL}/api/update-token/facebook`, {
         method: 'POST',
@@ -311,27 +396,34 @@ const generateSignature = async (params) => {
         body: JSON.stringify({ token: newToken })
       });
       const data = await res.json();
+      
       if (data.success) {
         // Fetch latest token from backend
-        const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
-        const headers: HeadersInit = {};
-        if (authData.token) {
-          headers['Authorization'] = `Bearer ${authData.token}`;
-        }
-        const tokenRes = await fetch(`${BACKEND_API_URL}/api/token/facebook`, { headers });
+        const tokenRes = await fetch(`${BACKEND_API_URL}/api/token/facebook`, { 
+          headers: getAuthHeaders()
+        });
         const tokenData = await tokenRes.json();
+        
         // Update local state for Facebook token
         setPlatforms(prev => prev.map(p =>
           p.id === 'facebook'
-            ? { ...p, fields: p.fields.map(f => f.key === 'fb_token' ? { ...f, value: tokenData.token } : f) }
+            ? { 
+                ...p, 
+                fields: p.fields.map(f => 
+                  (f.key === 'facebook_token' || f.key === 'fb_token') 
+                    ? { ...f, value: tokenData.token } 
+                    : f
+                )
+              }
             : p
         ));
         onAction('Facebook token updated successfully!', 'success');
       } else {
-        onAction('Failed to update Facebook token.', 'info');
+        onAction(`Failed to update Facebook token: ${data.error || 'Unknown error'}`, 'info');
       }
     } catch (err) {
-      onAction('Error updating Facebook token.', 'info');
+      console.error('Error updating Facebook token:', err);
+      onAction(`Error updating Facebook token: ${err instanceof Error ? err.message : 'Unknown error'}`, 'info');
     }
   };
 

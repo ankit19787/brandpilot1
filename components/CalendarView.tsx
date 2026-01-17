@@ -1,19 +1,35 @@
 
-import React, { useState } from 'react';
-import { Calendar as CalendarIcon, Clock, ChevronLeft, ChevronRight, MoreVertical, ExternalLink, Sparkles, Zap, CheckCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Calendar as CalendarIcon, Clock, ChevronLeft, ChevronRight, MoreVertical, ExternalLink, CheckCircle, Zap, Sparkles } from 'lucide-react';
 import { ContentItem } from '../types';
+import { canUseFeature } from '../services/planService';
+import FeatureGate from './FeatureGate';
 
 interface CalendarViewProps {
   scheduledPosts: ContentItem[];
   onAction: (msg: string) => void;
   autoPostMode: boolean;
   userId: string;
+  userPlan?: { plan: string; credits: number; maxCredits: number };
+  onUpgrade: () => void;
 }
 
-const CalendarView: React.FC<CalendarViewProps> = ({ scheduledPosts, onAction, autoPostMode, userId }) => {
+const CalendarView: React.FC<CalendarViewProps> = ({ scheduledPosts, onAction, autoPostMode, userId, userPlan = { plan: 'free', credits: 0, maxCredits: 1000 }, onUpgrade }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedPlatform, setSelectedPlatform] = useState<string>('all');
+  const canUseScheduling = canUseFeature(userPlan.plan, 'scheduling');
+  
+  // Get user role from localStorage
+  useEffect(() => {
+    try {
+      const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+      setUserRole(authData.user?.role || 'user');
+    } catch (error) {
+      console.error('Error reading auth data:', error);
+      setUserRole('user');
+    }
+  }, []);
   
   const sortedPosts = [...scheduledPosts].sort((a, b) => 
     new Date(a.scheduledFor).getTime() - new Date(b.scheduledFor).getTime()
@@ -167,7 +183,13 @@ const CalendarView: React.FC<CalendarViewProps> = ({ scheduledPosts, onAction, a
   };
 
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500">
+    <FeatureGate
+      isLocked={!canUseScheduling}
+      requiredPlan="pro"
+      featureName="Content Calendar"
+      onUpgrade={onUpgrade}
+    >
+      <div className="p-8 max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500">
       <div className="flex justify-between items-center mb-8">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center">
@@ -230,16 +252,18 @@ const CalendarView: React.FC<CalendarViewProps> = ({ scheduledPosts, onAction, a
           >
             Facebook
           </button>
-          <button
-            onClick={() => setSelectedPlatform('X')}
-            className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
-              selectedPlatform === 'X'
-                ? 'bg-slate-900 text-white shadow-md'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            X (Twitter)
-          </button>
+          {userRole === 'admin' && (
+            <button
+              onClick={() => setSelectedPlatform('X')}
+              className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
+                selectedPlatform === 'X'
+                  ? 'bg-slate-900 text-white shadow-md'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              X (Twitter)
+            </button>
+          )}
         </div>
       </div>
 
@@ -449,7 +473,9 @@ const CalendarView: React.FC<CalendarViewProps> = ({ scheduledPosts, onAction, a
             <div className="space-y-4">
               {[
                 { label: 'Instagram', count: sortedPosts.filter(p => p.platform === 'Instagram').length, color: 'bg-pink-600' },
-                { label: 'X (Twitter)', count: sortedPosts.filter(p => p.platform === 'X (Twitter)' || p.platform === 'Twitter').length, color: 'bg-slate-900' },
+                ...(userRole === 'admin' ? [
+                  { label: 'X (Twitter)', count: sortedPosts.filter(p => p.platform === 'X (Twitter)' || p.platform === 'Twitter').length, color: 'bg-slate-900' }
+                ] : []),
                 { label: 'Facebook', count: sortedPosts.filter(p => p.platform === 'Facebook').length, color: 'bg-blue-700' }
               ].map((p, i) => (
                 <div key={i} className="flex items-center gap-3">
@@ -462,7 +488,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({ scheduledPosts, onAction, a
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </FeatureGate>
   );
 };
 

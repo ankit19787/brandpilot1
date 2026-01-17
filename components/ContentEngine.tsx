@@ -16,23 +16,18 @@ import {
   Globe,
   Twitter,
   Instagram,
+  Facebook,
   Terminal,
-  MessageCircle,
   ToggleLeft,
   ToggleRight,
-  Subtitles,
-  Facebook,
-  ExternalLink,
   ChevronRight,
-  ImageIcon,
   Edit3,
   ImagePlus,
   Link as LinkIcon,
   Lock
 } from 'lucide-react';
 import { generatePost, platformAPI, generateImage, createPost } from '../services/gemini.client';
-import { deductCredits, getMonthlyPostCount, canCreatePost } from '../services/creditService';
-import { canAccessPlatform, CREDIT_COSTS, getPlanLimits } from '../services/planService';
+import { canAccessPlatform, canUseFeature, CREDIT_COSTS, getPlanLimits, getFilteredPlatforms } from '../services/planService';
 import { BrandDNA, ContentItem } from '../types';
 import CreditsWarning from './CreditsWarning';
 
@@ -75,6 +70,19 @@ const ContentEngine: React.FC<ContentEngineProps> = ({
   const [scheduledDate, setScheduledDate] = useState('');
   const [scheduledTime, setScheduledTime] = useState('');
   
+  // Get user role from localStorage
+  const [userRole, setUserRole] = useState('user');
+  
+  React.useEffect(() => {
+    try {
+      const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+      setUserRole(authData.user?.role || 'user');
+    } catch (error) {
+      console.error('Error reading auth data:', error);
+      setUserRole('user');
+    }
+  }, []);
+  
   const planLimits = getPlanLimits(userPlan.plan);
   const [ytTitle, setYtTitle] = useState('');
   const [generatedContent, setGeneratedContent] = useState('');
@@ -94,12 +102,21 @@ const ContentEngine: React.FC<ContentEngineProps> = ({
   const [postToAllPlatforms, setPostToAllPlatforms] = useState(false);
   
   const [postUrl, setPostUrl] = useState<string | null>(null);
+  const [twitterRateLimit, setTwitterRateLimit] = useState<any>(null);
   
   const [scheduleDate, setScheduleDate] = useState(new Date().toISOString().split('T')[0]);
   const [scheduleTime, setScheduleTime] = useState('09:00');
 
-  const connectedPlatforms = ['X (Twitter)', 'Instagram', 'Facebook'];
-  const visualPlatforms = ['Instagram', 'Facebook'];
+  // Filter connected platforms based on user role
+  const allPlatforms = ['X (Twitter)', 'Instagram', 'Facebook'];
+  const connectedPlatforms = allPlatforms.filter(platform => 
+    userRole === 'admin' || platform !== 'X (Twitter)'
+  );
+  const visualPlatforms = connectedPlatforms;
+  
+  // Check feature permissions
+  const canUseAutoPosting = canUseFeature(userPlan.plan, 'autoPosting');
+  const canUseScheduling = canUseFeature(userPlan.plan, 'scheduling');
 
   useEffect(() => {
     if (initialTopic) {
@@ -251,7 +268,14 @@ const ContentEngine: React.FC<ContentEngineProps> = ({
         resetPreview();
         setTopic('');
       } catch (error: any) {
-        onAction(error.message || `API Gateway Timeout.`);
+        // Handle rate limit errors specially for Twitter
+        if (error.status === 429 && plt === 'twitter' && error.rateLimitInfo) {
+          const { timeMessage, resetTime, limit, remaining } = error.rateLimitInfo;
+          setTwitterRateLimit(error.rateLimitInfo);
+          onAction(`⏱️ Twitter Rate Limit: ${error.message || `Please try again in ${timeMessage}. Resets at ${resetTime}`}`);
+        } else {
+          onAction(error.message || `API Gateway Timeout.`);
+        }
       } finally {
         setPublishing(false);
       }
@@ -369,7 +393,8 @@ const ContentEngine: React.FC<ContentEngineProps> = ({
     { name: 'X (Twitter)', icon: Twitter, color: 'text-sky-500' },
   ];
   
-  const availablePlatformNames = planLimits.platforms;
+  // Get filtered platforms based on plan and user role
+  const availablePlatformNames = getFilteredPlatforms(userPlan.plan, userRole);
   const availablePlatforms = platformsList.filter(p => availablePlatformNames.includes(p.name));
   const lockedPlatforms: any[] = [];
 
@@ -397,15 +422,34 @@ const ContentEngine: React.FC<ContentEngineProps> = ({
                 <Edit3 size={14} />
                 {isManualMode ? 'Manual Composer' : 'AI Draft Mode'}
             </button>
-            <button onClick={() => onToggleAutoPost(!autoPostEnabled)} className={`p-4 rounded-2xl border flex items-center gap-6 transition-all ${autoPostEnabled ? 'bg-indigo-600 text-white border-indigo-500 shadow-xl' : 'bg-white text-slate-600 border-slate-200'}`}>
-                <div className="flex flex-col text-right">
-                    <span className="text-xs font-black uppercase tracking-widest leading-none mb-1">AI Agent</span>
-                    <span className={`text-[10px] font-medium ${autoPostEnabled ? 'text-indigo-200' : 'text-slate-400'}`}>
-                        {autoPostEnabled ? 'Monitoring' : 'Standby'}
-                    </span>
+            
+            {canUseAutoPosting ? (
+              <button onClick={() => onToggleAutoPost(!autoPostEnabled)} className={`p-4 rounded-2xl border flex items-center gap-6 transition-all ${autoPostEnabled ? 'bg-indigo-600 text-white border-indigo-500 shadow-xl' : 'bg-white text-slate-600 border-slate-200'}`}>
+                  <div className="flex flex-col text-right">
+                      <span className="text-xs font-black uppercase tracking-widest leading-none mb-1">AI Agent</span>
+                      <span className={`text-[10px] font-medium ${autoPostEnabled ? 'text-indigo-200' : 'text-slate-400'}`}>
+                          {autoPostEnabled ? 'Monitoring' : 'Standby'}
+                      </span>
+                  </div>
+                  {autoPostEnabled ? <ToggleRight size={40} className="text-white fill-current" /> : <ToggleLeft size={40} className="text-slate-300" />}
+              </button>
+            ) : (
+              <div className="relative">
+                <div className="p-4 rounded-2xl border bg-slate-50 border-slate-200 opacity-50 flex items-center gap-6 cursor-not-allowed">
+                  <div className="flex flex-col text-right">
+                    <span className="text-xs font-black uppercase tracking-widest leading-none mb-1 text-slate-400">AI Agent</span>
+                    <span className="text-[10px] font-medium text-slate-400">Pro Plan Required</span>
+                  </div>
+                  <Lock size={24} className="text-slate-400" />
                 </div>
-                {autoPostEnabled ? <ToggleRight size={40} className="text-white fill-current" /> : <ToggleLeft size={40} className="text-slate-300" />}
-            </button>
+                <button
+                  onClick={onUpgrade}
+                  className="absolute inset-0 flex items-center justify-center bg-black/50 text-white rounded-2xl font-bold text-sm opacity-0 hover:opacity-100 transition-all"
+                >
+                  Upgrade to Pro
+                </button>
+              </div>
+            )}
         </div>
       </div>
 
@@ -540,12 +584,24 @@ const ContentEngine: React.FC<ContentEngineProps> = ({
             <div className="space-y-2 font-mono text-[11px]">
               <div className="flex justify-between items-center py-1 border-b border-white/5">
                 <span>PROTOCOL</span>
-                <span className="text-indigo-400 font-black uppercase">{platform === 'X (Twitter)' ? 'OAUTH_1.0a_HMAC' : 'GRAPH_v20.0'}</span>
+                <span className="text-indigo-400 font-black uppercase">{platform === 'X (Twitter)' ? 'OAUTH_2.0_BEARER' : 'GRAPH_v20.0'}</span>
               </div>
               <div className="flex justify-between items-center py-1 border-b border-white/5">
                 <span>RESOURCES</span>
                 <span className="text-amber-400 uppercase">{manualImageUrl ? 'REMOTE_PUBLIC' : localUploadedFile ? 'LOCAL_BUFFER' : generatedImageUrl ? 'AI_GENERATED' : 'TEXT_ONLY'}</span>
               </div>
+              {platform === 'X (Twitter)' && twitterRateLimit && (
+                <div className="flex justify-between items-center py-1 border-b border-white/5">
+                  <span>RATE LIMIT</span>
+                  <span className="text-red-400 uppercase">{twitterRateLimit.remaining || 0}/{twitterRateLimit.limit || 17}</span>
+                </div>
+              )}
+              {platform === 'X (Twitter)' && twitterRateLimit && twitterRateLimit.timeMessage && (
+                <div className="flex justify-between items-center py-1 border-b border-white/5">
+                  <span>RESET IN</span>
+                  <span className="text-yellow-400 uppercase">{twitterRateLimit.timeMessage}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -641,11 +697,15 @@ const ContentEngine: React.FC<ContentEngineProps> = ({
             {(generatedContent || isManualMode) && !publishing && !postUrl && (
               <div className="mt-8 grid grid-cols-2 gap-4">
                 <button onClick={handlePostNow} className="py-4 rounded-xl font-bold bg-slate-900 text-white hover:bg-slate-800 transition-all shadow-lg flex items-center justify-center gap-2 active:scale-95"><Send size={18} /> {postToAllPlatforms ? 'Push All Platforms' : 'Push Live'}</button>
-                <button onClick={() => setShowScheduler(!showScheduler)} className={`py-4 rounded-xl font-bold transition-all flex items-center justify-center gap-2 border active:scale-95 ${showScheduler ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-slate-200'}`}><Calendar size={18} /> Schedule</button>
+                {canUseScheduling ? (
+                  <button onClick={() => setShowScheduler(!showScheduler)} className={`py-4 rounded-xl font-bold transition-all flex items-center justify-center gap-2 border active:scale-95 ${showScheduler ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-slate-200'}`}><Calendar size={18} /> Schedule</button>
+                ) : (
+                  <button onClick={onUpgrade} className="py-4 rounded-xl font-bold transition-all flex items-center justify-center gap-2 border active:scale-95 bg-slate-50 text-slate-500 border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200"><Lock size={18} /> Upgrade to Schedule</button>
+                )}
               </div>
             )}
 
-            {showScheduler && (
+            {showScheduler && canUseScheduling && (
                 <div className="mt-4 p-4 bg-indigo-50 rounded-xl space-y-4 animate-in slide-in-from-top-2 border border-indigo-100">
                     <div className="grid grid-cols-2 gap-4">
                         <input type="date" value={scheduleDate} onChange={(e) => setScheduleDate(e.target.value)} className="w-full p-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-indigo-500" />

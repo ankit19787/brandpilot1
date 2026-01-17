@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Mail, Lock, Shield, CreditCard, Save, X, Check, AlertCircle, Camera } from 'lucide-react';
+import { User, Mail, Lock, CreditCard, Save, X, AlertCircle, Camera, Check, Shield } from 'lucide-react';
 
 const API_PREFIX = window.location.hostname === 'localhost' ? 'http://localhost:3001/api' : '/api';
 

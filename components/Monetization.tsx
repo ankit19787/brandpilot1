@@ -2,7 +2,6 @@
 import React, { useState, useEffect } from 'react';
 import { Coins, Target, ArrowUpRight, Loader2, Sparkles, DollarSign } from 'lucide-react';
 import { getMonetizationPlan } from '../services/gemini.client';
-import { deductCredits } from '../services/creditService';
 import { canUseFeature, CREDIT_COSTS } from '../services/planService';
 import { BrandDNA, MonetizationIdea } from '../types';
 import FeatureGate from './FeatureGate';

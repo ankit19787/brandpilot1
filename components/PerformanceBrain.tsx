@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { BarChart3, TrendingUp, AlertTriangle, Lightbulb, CheckCircle, Users, Eye, Heart, Share2 } from 'lucide-react';
+import { BarChart3, Users, Eye, Heart, Share2, CheckCircle, AlertTriangle, Lightbulb, TrendingUp } from 'lucide-react';
 import { 
   BarChart, 
   Bar, 

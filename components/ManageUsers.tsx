@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Shield, Mail, CreditCard, Calendar, Edit2, Save, X, Search, Filter, UserPlus, Trash2, CheckCircle, XCircle } from 'lucide-react';
+import { Users, Mail, CreditCard, Calendar, Edit2, Save, X, Search, Filter, Trash2, CheckCircle, XCircle, UserPlus, Shield } from 'lucide-react';
 
 interface User {
   id: string;
@@ -319,6 +319,28 @@ const ManageUsers: React.FC = () => {
                 className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 placeholder="user@example.com"
               />
+              {createForm.email && (
+                <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center gap-2 text-blue-700">
+                    <Mail size={16} />
+                    <span className="text-sm font-medium">Welcome Email Will Be Sent</span>
+                  </div>
+                  <p className="text-xs text-blue-600 mt-1">
+                    User will receive login credentials and getting started guide at <strong>{createForm.email}</strong>
+                  </p>
+                </div>
+              )}
+              {!createForm.email && (
+                <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <div className="flex items-center gap-2 text-amber-700">
+                    <XCircle size={16} />
+                    <span className="text-sm font-medium">No Welcome Email</span>
+                  </div>
+                  <p className="text-xs text-amber-600 mt-1">
+                    User will not receive login credentials via email
+                  </p>
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Role</label>

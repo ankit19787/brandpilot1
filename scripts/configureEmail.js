@@ -7,32 +7,32 @@ async function configureEmail() {
 
   const emailConfigs = [
     {
-      key: 'EMAIL_HOST',
+      key: 'email_host',
       value: process.argv[2] || 'smtp.gmail.com',
       description: 'SMTP host (e.g., smtp.gmail.com, smtp.office365.com)'
     },
     {
-      key: 'EMAIL_PORT',
+      key: 'email_port',
       value: process.argv[3] || '587',
       description: 'SMTP port (587 for TLS, 465 for SSL)'
     },
     {
-      key: 'EMAIL_SECURE',
+      key: 'email_secure',
       value: process.argv[4] || 'false',
       description: 'Use SSL (true for port 465, false for port 587)'
     },
     {
-      key: 'EMAIL_USER',
+      key: 'email_user',
       value: process.argv[5] || '',
       description: 'Email account username'
     },
     {
-      key: 'EMAIL_PASS',
+      key: 'email_pass',
       value: process.argv[6] || '',
       description: 'Email account password or app password'
     },
     {
-      key: 'EMAIL_FROM',
+      key: 'email_from',
       value: process.argv[7] || 'noreply@brandpilot.com',
       description: 'From email address'
     }

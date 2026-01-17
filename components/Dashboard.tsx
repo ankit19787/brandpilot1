@@ -14,7 +14,8 @@ import {
   XCircle,
   Activity,
   Calendar,
-  RefreshCw
+  RefreshCw,
+  Lock
 } from 'lucide-react';
 import { 
   CartesianGrid, 
@@ -29,11 +30,14 @@ import {
   Cell
 } from 'recharts';
 import { ActiveTab } from '../types';
+import { canUseFeature } from '../services/planService';
 
 interface DashboardProps {
   onNavigate: (tab: ActiveTab, topic: string) => void;
   hasDNA: boolean;
   auth?: { userId: string; username: string };
+  userPlan?: { plan: string; credits: number; maxCredits: number };
+  onUpgrade?: () => void;
 }
 
 interface DashboardStats {
@@ -49,7 +53,7 @@ interface DashboardStats {
 
 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
-const Dashboard: React.FC<DashboardProps> = ({ onNavigate, hasDNA, auth }) => {
+const Dashboard: React.FC<DashboardProps> = ({ onNavigate, hasDNA, auth, userPlan = { plan: 'free', credits: 0, maxCredits: 1000 }, onUpgrade }) => {
   const [stats, setStats] = useState<DashboardStats>({
     totalPosts: 0,
     publishedPosts: 0,
@@ -62,6 +66,21 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate, hasDNA, auth }) => {
   });
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const [userRole, setUserRole] = useState('user');
+  
+  // Check scheduling permissions
+  const canUseScheduling = canUseFeature(userPlan.plan, 'scheduling');
+
+  // Get user role from localStorage
+  useEffect(() => {
+    try {
+      const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+      setUserRole(authData.user?.role || 'user');
+    } catch (error) {
+      console.error('Error reading auth data:', error);
+      setUserRole('user');
+    }
+  }, []);
 
   const fetchDashboardData = async () => {
     try {
@@ -69,13 +88,20 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate, hasDNA, auth }) => {
       
       // Get auth token from localStorage
       const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
-      const headers: HeadersInit = {};
+      const headers: HeadersInit = {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      };
       
       if (authData.token) {
         headers['Authorization'] = `Bearer ${authData.token}`;
       }
       
-      const response = await fetch('/api/posts/all', { headers });
+      const response = await fetch('/api/posts', { 
+        headers,
+        cache: 'no-store' // More aggressive - bypass cache entirely
+      });
       if (!response.ok) throw new Error('Failed to fetch posts');
       
       const posts = await response.json();
@@ -91,8 +117,17 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate, hasDNA, auth }) => {
         return platform; // Return original if no match
       };
       
+      // Filter posts based on user role - exclude Twitter posts for non-admin users
+      let filteredPosts = posts;
+      if (userRole !== 'admin') {
+        filteredPosts = posts.filter((post: any) => {
+          const normalizedPlatform = normalizePlatform(post.platform);
+          return normalizedPlatform !== 'Twitter/X';
+        });
+      }
+      
       // Normalize platforms in posts
-      const normalizedPosts = posts.map((post: any) => ({
+      const normalizedPosts = filteredPosts.map((post: any) => ({
         ...post,
         normalizedPlatform: normalizePlatform(post.platform)
       }));
@@ -142,7 +177,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate, hasDNA, auth }) => {
     // Auto-refresh every 30 seconds
     const interval = setInterval(fetchDashboardData, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [userRole]); // Include userRole in dependencies
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -203,13 +238,23 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate, hasDNA, auth }) => {
           </div>
         </div>
         <div className="flex gap-3">
-          <button 
-            onClick={() => onNavigate('calendar', '')}
-            className="flex items-center gap-2 bg-slate-100 text-slate-700 px-4 py-2.5 rounded-xl font-medium hover:bg-slate-200 transition-all"
-          >
-            <Calendar size={18} />
-            Schedule
-          </button>
+          {canUseScheduling ? (
+            <button 
+              onClick={() => onNavigate('calendar', '')}
+              className="flex items-center gap-2 bg-slate-100 text-slate-700 px-4 py-2.5 rounded-xl font-medium hover:bg-slate-200 transition-all"
+            >
+              <Calendar size={18} />
+              Schedule
+            </button>
+          ) : (
+            <button 
+              onClick={onUpgrade}
+              className="flex items-center gap-2 bg-slate-50 text-slate-500 px-4 py-2.5 rounded-xl font-medium hover:bg-indigo-50 hover:text-indigo-600 transition-all border border-slate-200"
+            >
+              <Lock size={18} />
+              Schedule (Pro)
+            </button>
+          )}
           <button 
             onClick={() => onNavigate('engine', '')}
             className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-medium shadow-lg shadow-indigo-500/30 hover:bg-indigo-700 transition-all"
@@ -285,7 +330,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate, hasDNA, auth }) => {
             icon: Clock, 
             color: 'text-amber-500', 
             bg: 'bg-amber-50',
-            onClick: () => onNavigate('calendar', '')
+            onClick: canUseScheduling ? () => onNavigate('calendar', '') : onUpgrade
           },
           { 
             label: 'Failed Posts', 
@@ -324,8 +369,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate, hasDNA, auth }) => {
               Live Data
             </div>
           </div>
-          <div className="h-[300px] w-full min-h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-[300px] w-full min-h-[300px]" style={{ minWidth: '0' }}>
+            <ResponsiveContainer width="100%" height={300} minHeight={300}>
               <AreaChart data={generateChartData()}>
                 <defs>
                   <linearGradient id="colorPosts" x1="0" y1="0" x2="0" y2="1">
@@ -417,7 +462,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate, hasDNA, auth }) => {
       </div>
 
       {/* Quick Actions */}
-      {stats.scheduledPosts > 0 && (
+      {stats.scheduledPosts > 0 && canUseScheduling && (
         <div className="bg-gradient-to-r from-amber-400 to-orange-500 rounded-3xl p-6 text-white shadow-xl">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">

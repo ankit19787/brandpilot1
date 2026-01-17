@@ -19,7 +19,7 @@ class EmailService {
       const configs = await prisma.config.findMany({
         where: {
           key: {
-            in: ['EMAIL_HOST', 'EMAIL_PORT', 'EMAIL_SECURE', 'EMAIL_USER', 'EMAIL_PASS', 'EMAIL_FROM']
+            in: ['email_host', 'email_port', 'email_secure', 'email_user', 'email_pass', 'email_from']
           }
         }
       });
@@ -27,21 +27,20 @@ class EmailService {
       const configMap = {};
       configs.forEach(c => configMap[c.key] = c.value);
 
-      // Check if email credentials are configured
-      if (!configMap.EMAIL_HOST || !configMap.EMAIL_USER || !configMap.EMAIL_PASS) {
-        console.log('⚠️ Email service not configured. Run: node scripts/configureEmail.js');
-        return;
+      // Check required configuration
+      if (!configMap.email_host || !configMap.email_user || !configMap.email_pass) {
+        throw new Error('Email service not configured. Required: email_host, email_user, email_pass');
       }
 
-      this.fromEmail = configMap.EMAIL_FROM || 'noreply@brandpilot.com';
+      this.fromEmail = configMap.email_from || 'noreply@brandpilot.com';
 
       this.transporter = nodemailer.createTransport({
-        host: configMap.EMAIL_HOST,
-        port: parseInt(configMap.EMAIL_PORT || '587'),
-        secure: configMap.EMAIL_SECURE === 'true', // true for 465, false for other ports
+        host: configMap.email_host,
+        port: parseInt(configMap.email_port || '587'),
+        secure: configMap.email_secure === 'true', // true for 465, false for other ports
         auth: {
-          user: configMap.EMAIL_USER,
-          pass: configMap.EMAIL_PASS,
+          user: configMap.email_user,
+          pass: configMap.email_pass,
         },
       });
 
@@ -449,6 +448,98 @@ class EmailService {
       subject: '⚠️ Credits Running Low',
       html,
       text: `Hi ${username}, you have ${creditDetails.currentCredits} credits remaining. Consider upgrading to continue.`,
+    });
+  }
+
+  /**
+   * Send welcome email to new user
+   */
+  async sendWelcomeEmail(userEmail, username, password, userPlan = 'free') {
+    if (!userEmail) {
+      console.log('⏭️  Skipping welcome email - no email provided');
+      return { success: false, reason: 'No email provided' };
+    }
+
+    await this.initializeTransporter();
+    
+    if (!this.isConfigured) {
+      console.log('⏭️  Skipping welcome email - email service not configured');
+      return { success: false, reason: 'Email service not configured' };
+    }
+
+    const planFeatures = {
+      free: ['1,000 credits per month', 'Basic AI content generation', 'Single platform posting'],
+      pro: ['10,000 credits per month', 'Advanced AI features', 'Multi-platform posting', 'Brand DNA analysis'],
+      business: ['50,000 credits per month', 'Priority support', 'Team collaboration', 'Advanced analytics'],
+      enterprise: ['100,000 credits per month', 'Custom integrations', 'Dedicated support', 'White-label options']
+    };
+
+    const features = planFeatures[userPlan] || planFeatures.free;
+    const planName = userPlan.charAt(0).toUpperCase() + userPlan.slice(1);
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          .email-container { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; }
+          .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+          .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
+          .credentials-box { background: #fff; border: 2px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0; }
+          .feature-list { list-style: none; padding: 0; }
+          .feature-list li { padding: 8px 0; border-bottom: 1px solid #eee; }
+          .feature-list li:before { content: "✅"; margin-right: 10px; }
+          .cta-button { display: inline-block; background: #667eea; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0; }
+          .footer { text-align: center; padding: 20px; color: #666; font-size: 14px; }
+        </style>
+      </head>
+      <body>
+        <div class="email-container">
+          <div class="header">
+            <h1>🚀 Welcome to BrandPilot!</h1>
+          </div>
+          <div class="content">
+            <p>Hi <strong>${username}</strong>,</p>
+            <p>Your BrandPilot account has been created and you're ready to revolutionize your social media content! 🎉</p>
+            
+            <div class="credentials-box">
+              <h3>🔐 Your Login Credentials</h3>
+              <p><strong>Username:</strong> ${username}</p>
+              <p><strong>Password:</strong> ${password}</p>
+              <p><em>Please save these credentials in a secure location and consider changing your password after your first login.</em></p>
+            </div>
+
+            <h3>📦 Your ${planName} Plan Includes:</h3>
+            <ul class="feature-list">
+              ${features.map(feature => `<li>${feature}</li>`).join('')}
+            </ul>
+
+            <p>Get started by:</p>
+            <ol>
+              <li>🔑 Log in to your account</li>
+              <li>🎨 Create your Brand DNA profile</li>
+              <li>📱 Connect your social media platforms</li>
+              <li>✨ Start generating amazing content!</li>
+            </ol>
+
+            <p>Need help? Our documentation and support team are here to assist you every step of the way.</p>
+            
+            <p>Welcome to the future of social media content creation! 🌟</p>
+          </div>
+          <div class="footer">
+            <p>BrandPilot - Your AI-Powered Content Partner</p>
+            <p>This email was sent because an account was created for you by an administrator.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    return this.sendEmail({
+      to: userEmail,
+      subject: '🚀 Welcome to BrandPilot - Your Account is Ready!',
+      html,
+      text: `Hi ${username}, welcome to BrandPilot! Your account has been created. Username: ${username}, Password: ${password}. Please log in and consider changing your password.`,
     });
   }
 

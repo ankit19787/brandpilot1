@@ -87,8 +87,16 @@ export const publishToPlatform = async (platform: string, content: string, metad
   });
   
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Failed to publish');
+    const errorData = await response.json();
+    const error: any = new Error(errorData.message || errorData.error || 'Failed to publish');
+    error.status = response.status;
+    
+    // Preserve rate limit info for Twitter
+    if (response.status === 429 && errorData.rateLimitInfo) {
+      error.rateLimitInfo = errorData.rateLimitInfo;
+    }
+    
+    throw error;
   }
   
   return await response.json();

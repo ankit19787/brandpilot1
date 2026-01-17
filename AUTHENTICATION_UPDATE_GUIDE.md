@@ -37,6 +37,53 @@ This document summarizes **ALL** authentication changes implemented across the B
 - [SWAGGER_API_DOCS.md](SWAGGER_API_DOCS.md) - **UPDATED**: API auth requirements
 - [AUTO_POST_GUIDE.md](AUTO_POST_GUIDE.md) - **UPDATED**: Auth for auto-posting
 
+**Infrastructure Improvements**:
+- [services/gemini.ts](services/gemini.ts) - **UPDATED**: Dynamic API URLs from config
+- [services/gemini.server.ts](services/gemini.server.ts) - **UPDATED**: Dynamic API URLs from config  
+- [services/gemini.server.js](services/gemini.server.js) - **UPDATED**: Dynamic API URLs from config
+- [services/cloudinaryUpload.js](services/cloudinaryUpload.js) - **UPDATED**: Dynamic Cloudinary API URLs
+- [services/cloudinaryUpload.ts](services/cloudinaryUpload.ts) - **UPDATED**: Dynamic Cloudinary API URLs
+- [scripts/deleteAllCloudinaryImages.js](scripts/deleteAllCloudinaryImages.js) - **UPDATED**: Database config instead of env vars
+- **All hardcoded Facebook/Instagram/Cloudinary API URLs** replaced with dynamic database configuration
+
+---
+
+## 🔗 Dynamic API Configuration System
+
+### ✅ No More Hardcoded URLs
+All Facebook, Instagram, and Cloudinary API URLs are now **dynamically loaded from database configuration**:
+
+**Before (Hardcoded)**:
+```javascript
+const url = `https://graph.facebook.com/v20.0/oauth/access_token...`;
+const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
+return { status: 201, id: data.id, url: `facebook.com/${data.id}` };
+```
+
+**After (Dynamic)**:
+```javascript
+const { facebookApiUrl, facebookApiVersion, cloudinaryApiUrl, cloudinaryApiVersion } = await getPlatformConfig();
+const url = `${facebookApiUrl}/${facebookApiVersion}/oauth/access_token...`;
+const version = cloudinaryApiVersion || 'v1_1';
+const cloudinaryUrl = `${cloudinaryApiUrl || 'https://api.cloudinary.com'}/${version}/${cloudName}/image/upload`;
+return { status: 201, id: data.id, url: `https://facebook.com/${data.id}` };
+```
+
+**Configuration Values**:
+- `facebook_api_url`: `https://graph.facebook.com`
+- `instagram_api_url`: `https://graph.facebook.com`  
+- `facebook_api_version`: `v20.0`
+- `cloudinary_api_url`: `https://api.cloudinary.com`
+- `cloudinary_api_version`: `v1_1`
+
+**Benefits**:
+- ✅ **Environment Flexibility**: Easy switching between development/production APIs
+- ✅ **Version Management**: Update API versions without code changes
+- ✅ **Configuration Control**: All platform URLs managed in database
+- ✅ **Fallback Support**: Automatic fallback to default URLs if config missing
+- ✅ **Version Control**: Both Facebook and Cloudinary API versions are configurable
+- ✅ **Future Proof**: Support for alternative API endpoints
+
 ---
 
 ## 🚀 Authentication Implementation Pattern
