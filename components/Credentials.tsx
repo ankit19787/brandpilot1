@@ -76,44 +76,118 @@ const Credentials: React.FC<CredentialsProps> = ({ onAction }) => {
       try {
         const res = await fetch(`${BACKEND_API_URL}/api/config`);
         const configs = await res.json();
-        // Dynamically group config keys by platform
-        const platformMap: Record<string, PlatformCreds> = {};
-        configs.forEach(c => {
+        
+        // Initialize platform templates (without fields initially)
+        const platformMap: Record<string, PlatformCreds> = {
+          'x': {
+            id: 'x',
+            name: 'X (Twitter)',
+            icon: Twitter,
+            color: 'text-sky-500',
+            isConfigured: false,
+            fields: []
+          },
+          'facebook': {
+            id: 'facebook',
+            name: 'Facebook',
+            icon: Facebook,
+            color: 'text-blue-700',
+            isConfigured: false,
+            fields: []
+          },
+          'instagram': {
+            id: 'instagram',
+            name: 'Instagram',
+            icon: Instagram,
+            color: 'text-pink-600',
+            isConfigured: false,
+            fields: []
+          }
+        };
+        
+        // Add fields from database to appropriate platforms
+        configs.forEach((c: any) => {
           let platformId = 'other';
-          // Improved platform detection for all relevant keys
-          if (
-            c.key.includes('facebook') ||
-            c.key.startsWith('fb_') ||
-            c.key === 'facebook_token'
-          ) platformId = 'facebook';
-          else if (
-            c.key.includes('instagram') ||
-            c.key.startsWith('ig_') ||
-            c.key === 'instagram_token'
-          ) platformId = 'instagram';
-          else if (c.key.includes('x_') || c.key.includes('twitter')) platformId = 'x';
-          else if (c.key.includes('cloudinary')) platformId = 'cloudinary';
-          // Add more platform detection as needed
+          
+          // Determine platform based on key prefix/name
+          if (c.key.includes('facebook') || c.key.startsWith('fb_') || c.key === 'facebook_token') {
+            platformId = 'facebook';
+          } else if (c.key.includes('instagram') || c.key.startsWith('ig_') || c.key === 'instagram_token') {
+            platformId = 'instagram';
+          } else if (c.key.includes('x_') || c.key.includes('twitter')) {
+            platformId = 'x';
+          } else if (c.key.includes('cloudinary')) {
+            platformId = 'cloudinary';
+          } else if (c.key.includes('HYPERPAY') || c.key.includes('hyperpay')) {
+            platformId = 'hyperpay';
+          } else if (c.key.includes('gemini') || c.key.includes('GEMINI')) {
+            platformId = 'gemini';
+          } else {
+            platformId = 'other';
+          }
+          
+          // Create platform if it doesn't exist (for non-standard platforms like cloudinary, hyperpay, etc)
           if (!platformMap[platformId]) {
             platformMap[platformId] = {
               id: platformId,
-              name: platformId.charAt(0).toUpperCase() + platformId.slice(1),
-              icon: platformId === 'facebook' ? Facebook : platformId === 'instagram' ? Instagram : platformId === 'x' ? Twitter : Database,
-              color: platformId === 'facebook' ? 'text-blue-700' : platformId === 'instagram' ? 'text-pink-600' : platformId === 'x' ? 'text-sky-500' : 'text-slate-500',
-              isConfigured: true,
+              name: platformId === 'cloudinary' ? 'Cloudinary' : 
+                    platformId === 'hyperpay' ? 'HyperPay Gateway' :
+                    platformId === 'gemini' ? 'Gemini AI' :
+                    platformId === 'other' ? 'Other Configs' :
+                    platformId.charAt(0).toUpperCase() + platformId.slice(1),
+              icon: Database,
+              color: 'text-slate-500',
+              isConfigured: false,
               fields: []
             };
           }
+          
+          // Mark platform as configured if it has any values
+          if (c.value) {
+            platformMap[platformId].isConfigured = true;
+          }
+          
+          // Add field to the specific platform (no duplicates)
           platformMap[platformId].fields.push({
             label: c.key,
             key: c.key,
             value: c.value || '',
-            hidden: c.key.toLowerCase().includes('secret') || c.key.toLowerCase().includes('token')
+            hidden: c.key.toLowerCase().includes('secret') || 
+                    c.key.toLowerCase().includes('token') || 
+                    c.key.toLowerCase().includes('password') ||
+                    c.key.toLowerCase().includes('access')
           });
         });
+        
         setPlatforms(Object.values(platformMap));
       } catch (err) {
-        // Ignore if backend not available
+        // If backend not available, show empty platform templates
+        setPlatforms([
+          {
+            id: 'x',
+            name: 'X (Twitter)',
+            icon: Twitter,
+            color: 'text-sky-500',
+            isConfigured: false,
+            fields: []
+          },
+          {
+            id: 'facebook',
+            name: 'Facebook',
+            icon: Facebook,
+            color: 'text-blue-700',
+            isConfigured: false,
+            fields: []
+          },
+          {
+            id: 'instagram',
+            name: 'Instagram',
+            icon: Instagram,
+            color: 'text-pink-600',
+            isConfigured: false,
+            fields: []
+          }
+        ]);
       }
     }
     fetchCredentials();

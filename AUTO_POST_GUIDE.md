@@ -1,0 +1,239 @@
+# Auto-Post System - Complete Guide
+
+## Current Status
+✅ Auto-post setting: **ENABLED** in database  
+✅ Server: Running on port 3001  
+✅ Monitoring: Checks every 5 seconds for due posts  
+✅ Database: Posts persist across refreshes
+
+## How It Works
+
+### Architecture
+```
+Frontend (React App) ←→ Backend (Node.js) ←→ Database (PostgreSQL)
+     ↓                        ↓                    ↓
+  Monitoring              API Endpoints        Stored Posts
+  (every 5s)              /api/posts           status: scheduled
+                          /api/config          scheduledFor: DateTime
+```
+
+### Auto-Post Flow
+1. **User schedules a post** → Saved to database with `status: 'scheduled'`
+2. **React app loads** → Fetches `auto_post_enabled` config from database
+3. **useEffect monitoring starts** → Runs every 5 seconds (if enabled)
+4. **Each check:**
+   - Fetches all scheduled posts from database
+   - Filters posts where `scheduledFor <= now`
+   - Publishes each due post
+   - Updates database: `status: 'published'`, `publishedAt: now()`
+
+## Important: Frontend-Only Monitoring
+
+⚠️ **The auto-post monitoring runs in the React app, NOT on the server!**
+
+This means:
+- **App must be open** in a browser for auto-posting to work
+- Closing the browser tab stops monitoring
+- Refreshing the page restarts monitoring (config persists)
+
+### Why Frontend?
+- Real-time UI updates
+- User sees toast notifications
+- No need for background server jobs
+- State management in React
+
+## Testing Auto-Post
+
+### Step 1: Verify Auto-Post is Enabled
+```bash
+node scripts/checkAutoPostConfig.js
+```
+
+If disabled, enable it:
+```bash
+node scripts/enableAutoPost.js
+```
+
+### Step 2: Open the App in Browser
+```
+http://localhost:3000
+```
+
+### Step 3: Check Browser Console
+You should see:
+```
+[Agent] Auto-post setting loaded: true
+[Agent] Auto-post monitoring enabled, checking every 5 seconds
+```
+
+### Step 4: Create a Test Post
+```bash
+node scripts/testScheduledPost.js
+```
+
+This creates a post scheduled for 30 seconds from now.
+
+### Step 5: Watch the Console
+Every 5 seconds you'll see:
+```
+[Agent] Checking for due posts... Current time: ...
+[Agent] Total scheduled posts: 1
+[Agent] Post abc123: scheduled for ..., due: false
+```
+
+When the post is due:
+```
+[Agent] Found 1 due posts, publishing...
+[Agent] Auto-publishing due post: abc123 to X
+[Agent] Publishing to X...
+[Agent] ✅ Successfully published post abc123
+```
+
+### Step 6: Verify in Database
+```bash
+node scripts/checkPostStatus.js
+```
+
+Should show: `Status: published`
+
+## Common Issues & Solutions
+
+### Issue: "Auto-post is disabled"
+**Solution:** Enable it via CLI
+```bash
+node scripts/enableAutoPost.js
+```
+
+Then refresh the browser.
+
+### Issue: No posts showing in calendar
+**Problem:** Posts aren't loading from database
+
+**Check:**
+```bash
+# See all posts for a user
+node -e "import('@prisma/client').then(({PrismaClient}) => { const p = new PrismaClient(); p.post.findMany({where: {userId: '3a4b6e64-f294-422b-92cc-2944e876c32c'}}).then(posts => { console.log(posts); p.\$disconnect(); }); })"
+```
+
+**Solution:** Make sure you're logged in and userId matches
+
+### Issue: Posts not publishing
+**Check browser console** for errors:
+- Is auto-post enabled? Look for `[Agent] Auto-post monitoring enabled`
+- Are posts being detected? Look for `[Agent] Total scheduled posts: X`
+- Are they due? Check the `due: true/false` output
+
+**Common causes:**
+1. App not open in browser
+2. Auto-post disabled
+3. No posts scheduled
+4. Post time hasn't arrived yet
+5. API credentials missing (for X/Facebook/Instagram)
+
+### Issue: "No user ID available"
+**Problem:** Not logged in
+
+**Solution:** Log in to the app first
+
+## CLI Scripts Reference
+
+### Monitoring & Status
+```bash
+# Check auto-post config
+node scripts/checkAutoPostConfig.js
+
+# Check specific post status
+node scripts/checkPostStatus.js
+
+# Monitor post for changes
+node scripts/monitorAutoPost.js
+```
+
+### Configuration
+```bash
+# Enable auto-post
+node scripts/enableAutoPost.js
+
+# Check user plan
+node scripts/checkUserPlan.js
+
+# Check credentials
+node scripts/checkTwitterConfig.js
+```
+
+### Testing
+```bash
+# Create test scheduled post (30s from now)
+node scripts/testScheduledPost.js
+
+# Test Twitter posting immediately
+node scripts/testTwitterPost.js
+```
+
+## Database Schema
+
+### Post Table
+```prisma
+model Post {
+  id           String    @id
+  userId       String
+  platform     String    // 'X' | 'Facebook' | 'Instagram'
+  content      String
+  imageUrl     String?
+  status       String    // 'scheduled' | 'published' | 'failed'
+  scheduledFor DateTime?
+  publishedAt  DateTime?
+  createdAt    DateTime
+  updatedAt    DateTime
+}
+```
+
+### Config Table
+```prisma
+model Config {
+  id        String   @id
+  key       String   @unique
+  value     String
+  updatedAt DateTime
+}
+```
+
+**Auto-post config:**
+- Key: `auto_post_enabled`
+- Value: `'true'` or `'false'` (string)
+
+## API Endpoints
+
+### Posts
+- `GET /api/posts/:userId` - Get user's posts
+- `POST /api/posts` - Create new post
+- `PATCH /api/posts/:postId` - Update post status
+
+### Config
+- `GET /api/config/:key` - Get single config value
+- `POST /api/config` - Save/update config
+- `DELETE /api/config/:key` - Delete config
+
+## Troubleshooting Checklist
+
+When auto-post isn't working:
+
+- [ ] Server running? (`Server running on port 3001`)
+- [ ] App open in browser? (http://localhost:3000)
+- [ ] Logged in? (Check userId in console)
+- [ ] Auto-post enabled? (`node scripts/checkAutoPostConfig.js`)
+- [ ] Browser console shows monitoring? (`[Agent] Auto-post monitoring enabled`)
+- [ ] Posts exist in database? (Check with scripts)
+- [ ] Posts are actually scheduled? (status = 'scheduled')
+- [ ] Scheduled time has passed? (scheduledFor <= now)
+- [ ] API credentials configured? (X, Facebook, Instagram)
+
+## Next Steps
+
+1. **Open the app** in your browser
+2. **Check browser console** - should see monitoring logs
+3. **Create a test post** - `node scripts/testScheduledPost.js`
+4. **Wait 30 seconds** - watch browser console
+5. **Verify** - Post should auto-publish
+
+The system is now fully functional! The monitoring runs in the browser and all config is persisted in the database.

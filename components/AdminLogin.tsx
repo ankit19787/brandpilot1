@@ -1,6 +1,16 @@
 import React, { useState } from 'react';
 
-const AdminLogin: React.FC<{ onLogin: (token: string, role: string) => void }> = ({ onLogin }) => {
+interface AuthData {
+  token: string;
+  role: string;
+  userId: string;
+  username: string;
+  plan: string;
+  credits: number;
+  maxCredits: number;
+}
+
+const AdminLogin: React.FC<{ onLogin: (authData: AuthData) => void }> = ({ onLogin }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
@@ -22,7 +32,7 @@ const AdminLogin: React.FC<{ onLogin: (token: string, role: string) => void }> =
       if (!res.ok) throw new Error(data.error || 'Login failed');
       
       // Store complete auth data in localStorage
-      const authData = {
+      const authData: AuthData = {
         token: data.token,
         role: data.role,
         userId: data.userId,
@@ -40,7 +50,7 @@ const AdminLogin: React.FC<{ onLogin: (token: string, role: string) => void }> =
         localStorage.removeItem('brandpilot_remember');
       }
       
-      onLogin(data.token, data.role);
+      onLogin(authData);
     } catch (err: any) {
       setError(err.message);
     } finally {

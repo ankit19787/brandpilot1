@@ -13,7 +13,9 @@ import {
   Key,
   Info,
   LogOut,
-  Receipt
+  Receipt,
+  CreditCard,
+  MessageSquareText
 } from 'lucide-react';
 import { ActiveTab } from '../types';
 import PlanModal from './PlanModal';
@@ -45,8 +47,10 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onAction, ha
     { id: 'connections', label: 'Connections', icon: Link2, minPlan: 'free' },
     { id: 'credentials', label: 'API Credentials', icon: Key, minPlan: 'business' },
     { id: 'performance', label: 'Performance', icon: BarChart3, minPlan: 'free' },
+    { id: 'platform-responses', label: 'Platform Responses', icon: MessageSquareText, minPlan: 'business' },
     { id: 'monetization', label: 'Monetization', icon: Coins, minPlan: 'pro' },
     { id: 'payment-history', label: 'Payment History', icon: Receipt, minPlan: 'free' },
+    { id: 'credits', label: 'Credits & Usage', icon: CreditCard, minPlan: 'free' },
     { id: 'documentation', label: 'Documentation', icon: Info, minPlan: 'free' },
     { id: 'adminposts', label: 'Admin Posts', icon: Settings, minPlan: 'free' },
   ];
