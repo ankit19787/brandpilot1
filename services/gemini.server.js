@@ -9,6 +9,26 @@ import emailService from './emailService.js';
 
 const prisma = new PrismaClient();
 
+// Normalize platform names for consistency
+function normalizePlatform(platform) {
+  if (!platform) return 'Unknown';
+  const normalized = platform.toLowerCase().trim();
+  if (normalized.includes('twitter') || normalized === 'x' || normalized.includes('x (')) {
+    return 'X (Twitter)';
+  }
+  if (normalized === 'facebook') {
+    return 'Facebook';
+  }
+  if (normalized === 'instagram') {
+    return 'Instagram';
+  }
+  if (normalized === 'linkedin') {
+    return 'LinkedIn';
+  }
+  // Capitalize first letter for any other platforms
+  return platform.charAt(0).toUpperCase() + platform.slice(1).toLowerCase();
+}
+
 // Helper to fetch config value from DB
 async function getConfigValue(key) {
   const config = await prisma.config.findUnique({ where: { key } });
@@ -530,6 +550,10 @@ export const getMonetizationPlan = async (dna, metrics) => {
 export async function createPost({ userId, platform, content, imageUrl, status, scheduledFor }) {
   console.log('🔍 createPost called with userId:', userId, '| platform:', platform);
   try {
+    // Normalize platform name for consistency
+    const normalizedPlatform = normalizePlatform(platform);
+    console.log('📝 Normalized platform:', platform, '→', normalizedPlatform);
+    
     // Validate userId is provided and looks like a UUID
     if (!userId || userId === 'default_user') {
       console.error('❌ INVALID userId provided to createPost:', userId);
@@ -554,7 +578,7 @@ export async function createPost({ userId, platform, content, imageUrl, status, 
     const post = await prisma.post.create({
       data: {
         userId: finalUserId,
-        platform,
+        platform: normalizedPlatform,
         content,
         imageUrl: imageUrl || null,
         status,
@@ -572,7 +596,7 @@ export async function createPost({ userId, platform, content, imageUrl, status, 
           user.email,
           user.username,
           {
-            platform: platform,
+            platform: normalizedPlatform,
             content: content,
             platformPostId: post.id
           }

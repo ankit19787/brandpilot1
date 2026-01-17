@@ -17,7 +17,8 @@ import {
   CreditCard,
   MessageSquareText,
   User,
-  Mail
+  Mail,
+  Users
 } from 'lucide-react';
 import { ActiveTab } from '../types';
 import PlanModal from './PlanModal';
@@ -55,6 +56,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onAction, ha
     { id: 'credits', label: 'Credits & Usage', icon: CreditCard, minPlan: 'free' },
     { id: 'profile', label: 'Profile Settings', icon: User, minPlan: 'free' },
     { id: 'email-logs', label: 'Email Logs', icon: Mail, minPlan: 'business' },
+    { id: 'manage-users', label: 'Manage Users', icon: Users, minPlan: 'business' },
     { id: 'documentation', label: 'Documentation', icon: Info, minPlan: 'free' },
     { id: 'adminposts', label: 'Admin Posts', icon: Settings, minPlan: 'free' },
   ];
@@ -129,7 +131,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onAction, ha
         </div>
         
         <button 
-          onClick={() => onAction('Settings panel coming soon...')}
+          onClick={() => setActiveTab('profile')}
           className="w-full mt-4 flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white transition-all font-medium"
         >
           <Settings size={20} />

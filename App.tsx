@@ -14,6 +14,7 @@ import PaymentHistory from './components/PaymentHistory';
 import Credits from './components/Credits';
 import Profile from './components/Profile';
 import EmailLogs from './components/EmailLogs';
+import ManageUsers from './components/ManageUsers';
 import PlatformResponses from './components/PlatformResponses';
 import AdminLogin from './components/AdminLogin';
 import AdminPosts from './components/AdminPosts';
@@ -520,6 +521,7 @@ const App: React.FC = () => {
       case 'credits': return <Credits onAction={addToast} />;
       case 'profile': return <Profile auth={auth} userPlan={userPlan} onAction={addToast} onUpdate={(newAuth) => setAuth(newAuth)} />;
       case 'email-logs': return <EmailLogs />;
+      case 'manage-users': return <ManageUsers />;
       case 'platform-responses': return <PlatformResponses onAction={addToast} auth={auth} />;
       case 'documentation': return <Documentation />;
       case 'adminposts': return <AdminPosts />;

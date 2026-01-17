@@ -41,6 +41,25 @@ const PlatformResponses: React.FC<PlatformResponsesProps> = ({ onAction, auth })
   const [selectedPlatform, setSelectedPlatform] = useState<string>('all');
   const [showResponseDetails, setShowResponseDetails] = useState<{ [key: string]: boolean }>({});
 
+  // Normalize platform names for consistent display and filtering
+  const normalizePlatform = (platform: string): string => {
+    const normalized = platform.toLowerCase().trim();
+    if (normalized.includes('twitter') || normalized === 'x' || normalized.includes('x (')) {
+      return 'X (Twitter)';
+    }
+    if (normalized === 'facebook') {
+      return 'Facebook';
+    }
+    if (normalized === 'instagram') {
+      return 'Instagram';
+    }
+    if (normalized === 'linkedin') {
+      return 'LinkedIn';
+    }
+    // Capitalize first letter for any other platforms
+    return platform.charAt(0).toUpperCase() + platform.slice(1).toLowerCase();
+  };
+
   const fetchResponses = async () => {
     try {
       setLoading(true);
@@ -48,7 +67,12 @@ const PlatformResponses: React.FC<PlatformResponsesProps> = ({ onAction, auth })
       if (!response.ok) throw new Error('Failed to fetch posts');
       
       const posts = await response.json();
-      setResponses(posts);
+      // Normalize platform names when fetching
+      const normalizedPosts = posts.map((post: PlatformResponse) => ({
+        ...post,
+        platform: normalizePlatform(post.platform)
+      }));
+      setResponses(normalizedPosts);
     } catch (error: any) {
       onAction(`Failed to fetch platform responses: ${error.message}`, 'info');
     } finally {
@@ -188,7 +212,7 @@ const PlatformResponses: React.FC<PlatformResponsesProps> = ({ onAction, auth })
               <CheckCircle2 className="text-green-500" size={24} />
               <div>
                 <p className="text-sm text-slate-600">Published</p>
-                <p className="text-2xl font-bold text-slate-800">{responses.filter(r => r.status === 'published').length}</p>
+                <p className="text-2xl font-bold text-slate-800">{filteredResponses.filter(r => r.status === 'published').length}</p>
               </div>
             </div>
           </div>
@@ -197,7 +221,7 @@ const PlatformResponses: React.FC<PlatformResponsesProps> = ({ onAction, auth })
               <XCircle className="text-red-500" size={24} />
               <div>
                 <p className="text-sm text-slate-600">Failed</p>
-                <p className="text-2xl font-bold text-slate-800">{responses.filter(r => r.status === 'failed').length}</p>
+                <p className="text-2xl font-bold text-slate-800">{filteredResponses.filter(r => r.status === 'failed').length}</p>
               </div>
             </div>
           </div>
@@ -206,7 +230,7 @@ const PlatformResponses: React.FC<PlatformResponsesProps> = ({ onAction, auth })
               <Clock className="text-yellow-500" size={24} />
               <div>
                 <p className="text-sm text-slate-600">Scheduled</p>
-                <p className="text-2xl font-bold text-slate-800">{responses.filter(r => r.status === 'scheduled').length}</p>
+                <p className="text-2xl font-bold text-slate-800">{filteredResponses.filter(r => r.status === 'scheduled').length}</p>
               </div>
             </div>
           </div>
@@ -215,7 +239,7 @@ const PlatformResponses: React.FC<PlatformResponsesProps> = ({ onAction, auth })
               <MessageSquareText className="text-indigo-500" size={24} />
               <div>
                 <p className="text-sm text-slate-600">Total</p>
-                <p className="text-2xl font-bold text-slate-800">{responses.length}</p>
+                <p className="text-2xl font-bold text-slate-800">{filteredResponses.length}</p>
               </div>
             </div>
           </div>

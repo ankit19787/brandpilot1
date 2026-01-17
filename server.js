@@ -2,6 +2,7 @@
 import express from 'express';
 import bodyParser from 'body-parser';
 import cors from 'cors';
+import crypto from 'crypto';
 import facebookTokenApi from './services/facebookTokenApi.js';
 import twitterProxyApi from './services/twitterProxyApi.js';
 import authApi from './services/authApi.js';
@@ -1173,6 +1174,268 @@ app.get('/api/email-logs', async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching email logs:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// User management endpoints for admin panel
+
+// GET all users with statistics
+app.get('/api/users', async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        role: true,
+        plan: true,
+        credits: true,
+        maxCredits: true,
+        avatarStyle: true,
+        createdAt: true,
+        _count: {
+          select: { posts: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    res.json(users);
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST create new user
+app.post('/api/users', async (req, res) => {
+  try {
+    const { username, password, email, role, plan, credits, maxCredits } = req.body;
+    
+    // Plan credit limits
+    const planLimits = {
+      free: 1000,
+      pro: 10000,
+      business: 50000,
+      enterprise: 100000
+    };
+    
+    // Validation
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password are required' });
+    }
+    
+    if (role && !['admin', 'user'].includes(role)) {
+      return res.status(400).json({ error: 'Invalid role. Must be admin or user.' });
+    }
+    
+    if (plan && !['free', 'pro', 'business', 'enterprise'].includes(plan)) {
+      return res.status(400).json({ error: 'Invalid plan.' });
+    }
+    
+    // Check if username already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { username }
+    });
+    
+    if (existingUser) {
+      return res.status(400).json({ error: 'Username already exists' });
+    }
+    
+    // Hash password using SHA-256 (same as login)
+    const passwordHash = crypto.createHash('sha256').update(password).digest('hex');
+    
+    // Generate random avatar color
+    const avatarStyle = Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
+    
+    // Determine plan and credits
+    const userPlan = plan || 'free';
+    const planLimit = planLimits[userPlan];
+    
+    // Set maxCredits based on plan (override user input to enforce plan limits)
+    const userMaxCredits = maxCredits && parseInt(maxCredits) <= planLimit 
+      ? parseInt(maxCredits) 
+      : planLimit;
+    
+    // Set credits (default to maxCredits, but don't exceed plan limit)
+    const userCredits = credits 
+      ? Math.min(parseInt(credits), userMaxCredits) 
+      : userMaxCredits;
+    
+    // Create user
+    const newUser = await prisma.user.create({
+      data: {
+        username,
+        passwordHash,
+        email: email || null,
+        role: role || 'user',
+        plan: userPlan,
+        credits: userCredits,
+        maxCredits: userMaxCredits,
+        avatarStyle
+      },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        role: true,
+        plan: true,
+        credits: true,
+        maxCredits: true,
+        avatarStyle: true,
+        createdAt: true
+      }
+    });
+    
+    console.log(`✅ User created: ${newUser.username} (${newUser.id}) - ${newUser.role} / ${newUser.plan} - ${newUser.credits}/${newUser.maxCredits} credits`);
+    res.status(201).json(newUser);
+  } catch (error) {
+    console.error('Error creating user:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PATCH update user (role, plan, credits, etc.)
+app.patch('/api/users/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { username, email, role, plan, credits, maxCredits } = req.body;
+    
+    // Plan credit limits
+    const planLimits = {
+      free: 1000,
+      pro: 10000,
+      business: 50000,
+      enterprise: 100000
+    };
+    
+    // Get current user data
+    const currentUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { plan: true, credits: true, maxCredits: true }
+    });
+    
+    if (!currentUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    const updateData = {};
+    if (username !== undefined) updateData.username = username;
+    if (email !== undefined) updateData.email = email || null;
+    if (role !== undefined) {
+      if (!['admin', 'user'].includes(role)) {
+        return res.status(400).json({ error: 'Invalid role. Must be admin or user.' });
+      }
+      updateData.role = role;
+    }
+    
+    // Handle plan change with automatic credit adjustment
+    if (plan !== undefined) {
+      if (!['free', 'pro', 'business', 'enterprise'].includes(plan)) {
+        return res.status(400).json({ error: 'Invalid plan.' });
+      }
+      updateData.plan = plan;
+      
+      // Automatically set maxCredits based on new plan
+      const newMaxCredits = planLimits[plan];
+      updateData.maxCredits = newMaxCredits;
+      
+      // If upgrading plan, give user the new plan's credits
+      // If downgrading, cap credits at new plan's limit
+      if (currentUser.plan !== plan) {
+        if (planLimits[plan] > planLimits[currentUser.plan]) {
+          // Upgrading - give full credits of new plan
+          updateData.credits = newMaxCredits;
+          console.log(`📈 Plan upgraded from ${currentUser.plan} to ${plan}, credits set to ${newMaxCredits}`);
+        } else {
+          // Downgrading - cap credits at new limit
+          updateData.credits = Math.min(currentUser.credits, newMaxCredits);
+          console.log(`📉 Plan downgraded from ${currentUser.plan} to ${plan}, credits capped at ${newMaxCredits}`);
+        }
+      }
+    }
+    
+    // Handle manual credit updates (only if not changing plan)
+    if (credits !== undefined && plan === undefined) {
+      const effectiveMaxCredits = maxCredits !== undefined ? parseInt(maxCredits) : currentUser.maxCredits;
+      const requestedCredits = parseInt(credits);
+      
+      // Don't allow credits to exceed maxCredits
+      if (requestedCredits > effectiveMaxCredits) {
+        return res.status(400).json({ 
+          error: `Credits (${requestedCredits}) cannot exceed maxCredits (${effectiveMaxCredits})` 
+        });
+      }
+      updateData.credits = requestedCredits;
+    }
+    
+    // Handle manual maxCredits updates (only if not changing plan)
+    if (maxCredits !== undefined && plan === undefined) {
+      const requestedMaxCredits = parseInt(maxCredits);
+      const currentPlanLimit = planLimits[currentUser.plan];
+      
+      // Don't allow maxCredits to exceed plan limit
+      if (requestedMaxCredits > currentPlanLimit) {
+        return res.status(400).json({ 
+          error: `MaxCredits (${requestedMaxCredits}) cannot exceed plan limit for ${currentUser.plan} plan (${currentPlanLimit})` 
+        });
+      }
+      updateData.maxCredits = requestedMaxCredits;
+      
+      // Cap current credits if they exceed new maxCredits
+      if (currentUser.credits > requestedMaxCredits) {
+        updateData.credits = requestedMaxCredits;
+      }
+    }
+    
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: updateData,
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        role: true,
+        plan: true,
+        credits: true,
+        maxCredits: true,
+        avatarStyle: true,
+        createdAt: true
+      }
+    });
+    
+    console.log(`✅ User updated: ${updatedUser.username} (${updatedUser.id}) - ${updatedUser.plan} plan - ${updatedUser.credits}/${updatedUser.maxCredits} credits`);
+    res.json(updatedUser);
+  } catch (error) {
+    console.error('Error updating user:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE user
+app.delete('/api/users/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    // Check if user exists
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Delete user and all related data (cascades via Prisma schema)
+    await prisma.user.delete({
+      where: { id: userId }
+    });
+    
+    console.log(`🗑️ User deleted: ${user.username} (${userId})`);
+    res.json({ message: 'User deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting user:', error);
     res.status(500).json({ error: error.message });
   }
 });

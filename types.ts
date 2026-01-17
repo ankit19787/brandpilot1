@@ -98,4 +98,4 @@ export interface UserPlan {
   maxCredits: number;
 }
 
-export type ActiveTab = 'dashboard' | 'dna' | 'strategist' | 'engine' | 'performance' | 'monetization' | 'calendar' | 'connections' | 'credentials' | 'payment-history' | 'credits' | 'profile' | 'email-logs' | 'documentation' | 'adminposts' | 'platform-responses' | 'api-test';
+export type ActiveTab = 'dashboard' | 'dna' | 'strategist' | 'engine' | 'performance' | 'monetization' | 'calendar' | 'connections' | 'credentials' | 'payment-history' | 'credits' | 'profile' | 'email-logs' | 'manage-users' | 'documentation' | 'adminposts' | 'platform-responses' | 'api-test';
