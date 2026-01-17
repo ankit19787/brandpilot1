@@ -26,6 +26,14 @@ const Profile: React.FC<ProfileProps> = ({ auth, userPlan, onAction, onUpdate })
     accountCreated: new Date()
   });
 
+  const getAuthHeaders = () => {
+    const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+    return {
+      'Content-Type': 'application/json',
+      ...(authData.token ? { 'Authorization': `Bearer ${authData.token}` } : {})
+    };
+  };
+
   // Avatar options
   const avatarStyles = [
     { id: 'default', name: 'Default', bg: '6366f1', color: 'fff' },
@@ -45,7 +53,9 @@ const Profile: React.FC<ProfileProps> = ({ auth, userPlan, onAction, onUpdate })
 
     try {
       // Load user stats
-      const response = await fetch(`${API_PREFIX}/user/stats/${auth.userId}`);
+      const response = await fetch(`${API_PREFIX}/user/stats/${auth.userId}`, {
+        headers: getAuthHeaders()
+      });
       if (response.ok) {
         const data = await response.json();
         setUserStats(data);

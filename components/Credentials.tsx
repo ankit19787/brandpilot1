@@ -42,11 +42,24 @@ interface PlatformCreds {
 }
 
 const Credentials: React.FC<CredentialsProps> = ({ onAction }) => {
+  const getAuthHeaders = () => {
+    const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+    return {
+      'Content-Type': 'application/json',
+      ...(authData.token ? { 'Authorization': `Bearer ${authData.token}` } : {})
+    };
+  };
+
     // Fetch latest Facebook token on mount
     React.useEffect(() => {
       async function fetchFacebookToken() {
         try {
-          const res = await fetch(`${BACKEND_API_URL}/api/facebook-token`);
+          const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+          const headers: HeadersInit = {};
+          if (authData.token) {
+            headers['Authorization'] = `Bearer ${authData.token}`;
+          }
+          const res = await fetch(`${BACKEND_API_URL}/api/facebook-token`, { headers });
           const data = await res.json();
           if (data.token) {
             setPlatforms(prev => prev.map(p =>
@@ -75,7 +88,12 @@ const Credentials: React.FC<CredentialsProps> = ({ onAction }) => {
   React.useEffect(() => {
     async function fetchCredentials() {
       try {
-        const res = await fetch(`${BACKEND_API_URL}/api/config`);
+        const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+        const headers: HeadersInit = {};
+        if (authData.token) {
+          headers['Authorization'] = `Bearer ${authData.token}`;
+        }
+        const res = await fetch(`${BACKEND_API_URL}/api/config`, { headers });
         const configs = await res.json();
         
         // Initialize platform templates (without fields initially)
@@ -253,7 +271,7 @@ const generateSignature = async (params) => {
         if (field.key.endsWith('_token') || field.key === 'ig_access_token' || field.key === 'x_access_token') {
           const res = await fetch(`${BACKEND_API_URL}/api/update-token/${platformId}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getAuthHeaders(),
             body: JSON.stringify({ token: field.value })
           });
           const data = await res.json();
@@ -262,7 +280,7 @@ const generateSignature = async (params) => {
           // For other config fields, use the old endpoint
           const res = await fetch(`${BACKEND_API_URL}/api/config`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getAuthHeaders(),
             body: JSON.stringify({ key: field.key, value: field.value })
           });
           const data = await res.json();
@@ -289,13 +307,18 @@ const generateSignature = async (params) => {
     try {
       const res = await fetch(`${BACKEND_API_URL}/api/update-token/facebook`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ token: newToken })
       });
       const data = await res.json();
       if (data.success) {
         // Fetch latest token from backend
-        const tokenRes = await fetch(`${BACKEND_API_URL}/api/token/facebook`);
+        const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+        const headers: HeadersInit = {};
+        if (authData.token) {
+          headers['Authorization'] = `Bearer ${authData.token}`;
+        }
+        const tokenRes = await fetch(`${BACKEND_API_URL}/api/token/facebook`, { headers });
         const tokenData = await tokenRes.json();
         // Update local state for Facebook token
         setPlatforms(prev => prev.map(p =>

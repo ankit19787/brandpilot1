@@ -39,6 +39,16 @@ const App: React.FC = () => {
     credits: 7500,
     maxCredits: 10000
   });
+
+  const getAuthHeaders = () => {
+    const authData = localStorage.getItem('brandpilot_auth');
+    if (!authData) return { 'Content-Type': 'application/json' };
+    const parsed = JSON.parse(authData);
+    return {
+      'Content-Type': 'application/json',
+      ...(parsed.token ? { 'Authorization': `Bearer ${parsed.token}` } : {})
+    };
+  };
   const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
 
   const handleCreditsUpdate = (newCredits: number) => {
@@ -225,8 +235,15 @@ const App: React.FC = () => {
   // Load auto-post setting from database
   useEffect(() => {
     const loadAutoPostSetting = async () => {
+      if (!auth?.token) {
+        console.log('Skipping auto-post setting load - no auth token');
+        return;
+      }
+      
       try {
-        const response = await fetch('/api/config/auto_post_enabled');
+        const response = await fetch('/api/config/auto_post_enabled', { 
+          headers: getAuthHeaders() 
+        });
         if (response.ok) {
           const data = await response.json();
           const isEnabled = data.value === 'true';
@@ -239,7 +256,7 @@ const App: React.FC = () => {
     };
     
     loadAutoPostSetting();
-  }, []);
+  }, [auth?.token]);
 
   // Simulated Agentic Background Worker
   useEffect(() => {
@@ -296,7 +313,7 @@ const App: React.FC = () => {
               // IMMEDIATELY mark post as 'publishing' in database to prevent duplicate attempts
               await fetch(`/api/posts/${post.id}`, {
                 method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
+                headers: getAuthHeaders(),
                 body: JSON.stringify({ 
                   status: 'publishing', 
                   publishAttempts: (post.publishAttempts || 0) + 1,
@@ -317,7 +334,7 @@ const App: React.FC = () => {
                 // Mark as failed in database with error details
                 await fetch(`/api/posts/${post.id}`, {
                   method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
+                  headers: getAuthHeaders(),
                   body: JSON.stringify({ 
                     status: 'failed',
                     platformError: 'Instagram posts require an image URL',
@@ -342,7 +359,7 @@ const App: React.FC = () => {
               // Update database status with platform response data
               await fetch(`/api/posts/${post.id}`, {
                 method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
+                headers: getAuthHeaders(),
                 body: JSON.stringify({ 
                   status: 'published', 
                   publishedAt: new Date().toISOString(),
@@ -369,7 +386,7 @@ const App: React.FC = () => {
               // Update database to failed status with error details
               await fetch(`/api/posts/${post.id}`, {
                 method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
+                headers: getAuthHeaders(),
                 body: JSON.stringify({ 
                   status: 'failed',
                   platformError: errorMsg,
@@ -481,7 +498,7 @@ const App: React.FC = () => {
             try {
               await fetch('/api/config', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: getAuthHeaders(),
                 body: JSON.stringify({ key: 'auto_post_enabled', value: String(val) })
               });
               console.log('Auto-post setting saved:', val);

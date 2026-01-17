@@ -17,7 +17,16 @@ const AdminPosts = () => {
     async function fetchPosts() {
       try {
         setLoading(true);
-        const response = await fetch('/api/posts/all');
+        
+        // Get auth token from localStorage
+        const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+        const headers: HeadersInit = {};
+        
+        if (authData.token) {
+          headers['Authorization'] = `Bearer ${authData.token}`;
+        }
+        
+        const response = await fetch('/api/posts/all', { headers });
         if (!response.ok) {
           throw new Error('Failed to fetch posts');
         }

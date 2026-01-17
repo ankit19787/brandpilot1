@@ -1,8 +1,9 @@
-# Auto-Post System - Complete Guide
+# Auto-Post System - Complete Guide with Authentication
 
 ## Current Status
 ✅ Auto-post setting: **ENABLED** in database  
 ✅ Server: Running on port 3001  
+✅ Authentication: **Bearer token required** for all APIs
 ✅ Monitoring: Checks every 5 seconds for due posts  
 ✅ Database: Posts persist across refreshes
 
@@ -15,17 +16,36 @@ Frontend (React App) ←→ Backend (Node.js) ←→ Database (PostgreSQL)
   Monitoring              API Endpoints        Stored Posts
   (every 5s)              /api/posts           status: scheduled
                           /api/config          scheduledFor: DateTime
+                          (with Bearer token)  (authenticated)
 ```
 
-### Auto-Post Flow
-1. **User schedules a post** → Saved to database with `status: 'scheduled'`
-2. **React app loads** → Fetches `auto_post_enabled` config from database
-3. **useEffect monitoring starts** → Runs every 5 seconds (if enabled)
-4. **Each check:**
-   - Fetches all scheduled posts from database
+### Auto-Post Flow with Authentication
+1. **User logs in** → Gets Bearer token stored in localStorage
+2. **User schedules a post** → Saved to database with `status: 'scheduled'` (authenticated request)
+3. **React app loads** → Fetches `auto_post_enabled` config from database (with auth headers)
+4. **useEffect monitoring starts** → Runs every 5 seconds (if enabled and authenticated)
+5. **Each check:**
+   - Fetches all scheduled posts from database (Bearer token required)
    - Filters posts where `scheduledFor <= now`
-   - Publishes each due post
-   - Updates database: `status: 'published'`, `publishedAt: now()`
+   - Publishes each due post (authenticated publish API)
+   - Updates database: `status: 'published'`, `publishedAt: now()` (with auth headers)
+
+## 🔐 Authentication Requirements
+
+**ALL auto-post operations require authentication:**
+
+- ✅ `GET /api/config/auto_post_enabled` - Get auto-post setting
+- ✅ `PUT /api/config/auto_post_enabled` - Enable/disable auto-post
+- ✅ `GET /api/posts` - Fetch scheduled posts
+- ✅ `POST /api/publish` - Publish posts to platforms
+- ✅ `PUT /api/posts/{id}` - Update post status
+
+### Authentication Headers Required
+```javascript
+// All auto-post API calls include:
+Authorization: Bearer {user_token}
+Content-Type: application/json
+```
 
 ## Important: Frontend-Only Monitoring
 
@@ -33,16 +53,18 @@ Frontend (React App) ←→ Backend (Node.js) ←→ Database (PostgreSQL)
 
 This means:
 - **App must be open** in a browser for auto-posting to work
+- **User must be logged in** for authentication
 - Closing the browser tab stops monitoring
-- Refreshing the page restarts monitoring (config persists)
+- Refreshing the page restarts monitoring (token persists in localStorage)
+- **Token expiration** (7 days) will stop auto-posting until re-login
 
 ### Why Frontend?
-- Real-time UI updates
-- User sees toast notifications
-- No need for background server jobs
-- State management in React
+- Real-time UI updates with authentication context
+- User sees toast notifications for authenticated actions
+- Access to stored Bearer tokens in localStorage
+- State management in React with user session
 
-## Testing Auto-Post
+## Testing Auto-Post with Authentication
 
 ### Step 1: Verify Auto-Post is Enabled
 ```bash
@@ -54,29 +76,37 @@ If disabled, enable it:
 node scripts/enableAutoPost.js
 ```
 
-### Step 2: Open the App in Browser
-```
-http://localhost:3000
-```
+### Step 2: Login to Get Authentication Token
+1. Open app: `http://localhost:5173`
+2. Login with valid credentials (e.g., `ruchi` / `123456`)
+3. Verify token is stored: Check browser localStorage for `brandpilot_auth`
 
-### Step 3: Check Browser Console
+### Step 3: Check Browser Console for Authentication
 You should see:
 ```
+[Agent] User authenticated, token available
 [Agent] Auto-post setting loaded: true
 [Agent] Auto-post monitoring enabled, checking every 5 seconds
 ```
 
-### Step 4: Create a Test Post
+If you see authentication errors:
+```
+[Agent] Failed to fetch auto-post config: 401 (Unauthorized)
+```
+This means you need to login or your token has expired.
+
+### Step 4: Create a Test Post (Authenticated)
 ```bash
 node scripts/testScheduledPost.js
 ```
 
-This creates a post scheduled for 30 seconds from now.
+This creates an authenticated post scheduled for 30 seconds from now.
 
-### Step 5: Watch the Console
+### Step 5: Watch the Console (Authentication Flow)
 Every 5 seconds you'll see:
 ```
 [Agent] Checking for due posts... Current time: ...
+[Agent] Fetching scheduled posts with authentication
 [Agent] Total scheduled posts: 1
 [Agent] Post abc123: scheduled for ..., due: false
 ```
@@ -85,7 +115,7 @@ When the post is due:
 ```
 [Agent] Found 1 due posts, publishing...
 [Agent] Auto-publishing due post: abc123 to X
-[Agent] Publishing to X...
+[Agent] Publishing to X with authentication...
 [Agent] ✅ Successfully published post abc123
 ```
 

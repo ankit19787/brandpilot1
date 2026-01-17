@@ -1,12 +1,13 @@
-# Credits System Implementation
+# Credits System Implementation (with Authentication)
 
 ## Overview
-The BrandPilot OS now includes a comprehensive credits management system that tracks credit usage, maintains transaction history, and automatically deducts credits when users publish content to social media platforms.
+The BrandPilot OS now includes a comprehensive credits management system that tracks credit usage, maintains transaction history, and automatically deducts credits when users publish content to social media platforms. **All credit operations require Bearer token authentication.**
 
 ## Features
 
-### 1. Credits & Usage Tab
-- **Location**: Accessible from the sidebar navigation
+### 1. Credits & Usage Tab (Authenticated)
+- **Location**: Accessible from the sidebar navigation (after login)
+- **Authentication**: Requires valid Bearer token for all operations
 - **Features**:
   - Current credit balance with visual progress bar
   - Credit costs reference (Brand DNA: 50, Content: 30, Image: 40)
@@ -14,16 +15,16 @@ The BrandPilot OS now includes a comprehensive credits management system that tr
   - Detailed transaction information (date, action, amount, balance)
   - Color-coded transactions (green for additions, red for deductions)
 
-### 2. Automatic Credit Deduction
-Credits are automatically deducted when users:
+### 2. Automatic Credit Deduction (Authenticated)
+Credits are automatically deducted when users (with valid authentication):
 - **Publish Content** (30 credits): When posting to any social media platform
 - **Generate Brand DNA** (50 credits): When creating brand identity analysis
 - **Generate Images** (40 credits): When creating AI-generated images
 
-### 3. Transaction History
+### 3. Transaction History (Secure)
 All credit activities are logged in the `CreditTransaction` table with:
 - Transaction ID
-- User ID
+- User ID (authenticated user only)
 - Amount (positive for additions, negative for deductions)
 - Action type (content_publish, brand_dna, image_generation, etc.)
 - Description
@@ -31,23 +32,31 @@ All credit activities are logged in the `CreditTransaction` table with:
 - Balance after transaction
 - Timestamp
 
-## API Endpoints
+## API Endpoints (Bearer Token Required)
 
 ### Get User Credits
 ```
 GET /api/user/:userId/credits
+Authorization: Bearer {token}
 ```
-Returns current credit balance for a user.
+Returns current credit balance for authenticated user.
 
-### Get Credit History
+### Get Credit History  
 ```
 GET /api/user/:userId/credit-history?limit=50&offset=0
+Authorization: Bearer {token}
 ```
-Returns paginated transaction history.
+Returns paginated transaction history for authenticated user.
 
 **Query Parameters**:
 - `limit`: Number of transactions to return (default: 50)
 - `offset`: Number of transactions to skip (default: 0)
+
+**Authentication Headers**:
+```javascript
+Authorization: Bearer {your_token_here}
+Content-Type: application/json
+```
 
 **Response**:
 ```json

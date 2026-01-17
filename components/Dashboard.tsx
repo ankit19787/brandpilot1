@@ -66,7 +66,16 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate, hasDNA, auth }) => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/posts/all');
+      
+      // Get auth token from localStorage
+      const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+      const headers: HeadersInit = {};
+      
+      if (authData.token) {
+        headers['Authorization'] = `Bearer ${authData.token}`;
+      }
+      
+      const response = await fetch('/api/posts/all', { headers });
       if (!response.ok) throw new Error('Failed to fetch posts');
       
       const posts = await response.json();

@@ -37,6 +37,14 @@ const ManageUsers: React.FC = () => {
 
   const roles = ['admin', 'user'];
   const plans = ['free', 'pro', 'business', 'enterprise'];
+
+  const getAuthHeaders = () => {
+    const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+    return {
+      'Content-Type': 'application/json',
+      ...(authData.token ? { 'Authorization': `Bearer ${authData.token}` } : {})
+    };
+  };
   
   // Plan credit limits
   const planLimits: Record<string, number> = {
@@ -63,7 +71,12 @@ const ManageUsers: React.FC = () => {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/users');
+      const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+      const headers: HeadersInit = {};
+      if (authData.token) {
+        headers['Authorization'] = `Bearer ${authData.token}`;
+      }
+      const response = await fetch('/api/users', { headers });
       const data = await response.json();
       setUsers(data);
     } catch (error) {
@@ -103,7 +116,7 @@ const ManageUsers: React.FC = () => {
     try {
       const response = await fetch(`/api/users/${userId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(editForm)
       });
 
@@ -128,7 +141,8 @@ const ManageUsers: React.FC = () => {
 
     try {
       const response = await fetch(`/api/users/${userId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: getAuthHeaders()
       });
 
       if (response.ok) {
@@ -152,7 +166,7 @@ const ManageUsers: React.FC = () => {
     try {
       const response = await fetch('/api/users', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(createForm)
       });
 

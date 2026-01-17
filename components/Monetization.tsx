@@ -22,6 +22,14 @@ interface MonetizationProps {
 const Monetization: React.FC<MonetizationProps> = ({ dna, onAction, userPlan = { plan: 'free', credits: 0, maxCredits: 1000 }, onUpgrade, onCreditsUpdate, userId }) => {
   const [plans, setPlans] = useState<MonetizationIdea[]>([]);
   const [loading, setLoading] = useState(false);
+
+  const getAuthHeaders = () => {
+    const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+    return {
+      'Content-Type': 'application/json',
+      ...(authData.token ? { 'Authorization': `Bearer ${authData.token}` } : {})
+    };
+  };
   
   const isLocked = !canUseFeature(userPlan.plan, 'monetization');
   const hasEnoughCredits = userPlan.credits >= CREDIT_COSTS.monetizationPlan;
@@ -37,7 +45,12 @@ const Monetization: React.FC<MonetizationProps> = ({ dna, onAction, userPlan = {
   const loadSavedPlan = async () => {
     console.log('📥 Loading saved monetization plan for userId:', userId);
     try {
-      const response = await fetch(`${API_PREFIX}/monetization-plan/${userId}`);
+      const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+      const headers: HeadersInit = {};
+      if (authData.token) {
+        headers['Authorization'] = `Bearer ${authData.token}`;
+      }
+      const response = await fetch(`${API_PREFIX}/monetization-plan/${userId}`, { headers });
       console.log('📥 Load response status:', response.status);
       if (response.ok) {
         const savedPlan = await response.json();
@@ -85,7 +98,12 @@ const Monetization: React.FC<MonetizationProps> = ({ dna, onAction, userPlan = {
       // First, check if user has existing active Monetization Plan
       if (userId) {
         console.log('📦 Checking for existing Monetization Plan in database...');
-        const existingResponse = await fetch(`${API_PREFIX}/monetization-plan/${userId}`);
+        const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+        const headers: HeadersInit = {};
+        if (authData.token) {
+          headers['Authorization'] = `Bearer ${authData.token}`;
+        }
+        const existingResponse = await fetch(`${API_PREFIX}/monetization-plan/${userId}`, { headers });
         if (existingResponse.ok) {
           const existingData = await existingResponse.json();
           if (existingData.plans && Array.isArray(existingData.plans)) {
@@ -220,7 +238,12 @@ const Monetization: React.FC<MonetizationProps> = ({ dna, onAction, userPlan = {
       // Try to load plans even without dna first, in case user has existing data
       try {
         console.log('📦 Auto-loading existing Monetization Plans for user:', userId);
-        const existingResponse = await fetch(`${API_PREFIX}/monetization-plan/${userId}`);
+        const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+        const headers: HeadersInit = {};
+        if (authData.token) {
+          headers['Authorization'] = `Bearer ${authData.token}`;
+        }
+        const existingResponse = await fetch(`${API_PREFIX}/monetization-plan/${userId}`, { headers });
         if (existingResponse.ok) {
           const existingData = await existingResponse.json();
           if (existingData.plans && Array.isArray(existingData.plans)) {

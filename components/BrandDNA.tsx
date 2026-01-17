@@ -22,6 +22,14 @@ interface BrandDNAProps {
 const BrandDNA: React.FC<BrandDNAProps> = ({ dna, setDna, userPlan = { plan: 'free', credits: 0, maxCredits: 1000 }, onUpgrade, onCreditsUpdate, userId }) => {
   const [loading, setLoading] = useState(false);
   const [input, setInput] = useState('');
+
+  const getAuthHeaders = () => {
+    const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+    return {
+      'Content-Type': 'application/json',
+      ...(authData.token ? { 'Authorization': `Bearer ${authData.token}` } : {})
+    };
+  };
   
   const isLocked = !canUseFeature(userPlan.plan, 'brandDNA');
   const hasEnoughCredits = userPlan.credits >= CREDIT_COSTS.brandDNAAnalysis;
@@ -35,7 +43,12 @@ const BrandDNA: React.FC<BrandDNAProps> = ({ dna, setDna, userPlan = { plan: 'fr
 
   const loadSavedDNA = async () => {
     try {
-      const response = await fetch(`${API_PREFIX}/brand-dna/${userId}`);
+      const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+      const headers: HeadersInit = {};
+      if (authData.token) {
+        headers['Authorization'] = `Bearer ${authData.token}`;
+      }
+      const response = await fetch(`${API_PREFIX}/brand-dna/${userId}`, { headers });
       if (response.ok) {
         const savedDNA = await response.json();
         setDna(savedDNA);
@@ -58,7 +71,12 @@ const BrandDNA: React.FC<BrandDNAProps> = ({ dna, setDna, userPlan = { plan: 'fr
       // First, check if user has existing active Brand DNA
       if (userId) {
         console.log('📦 Checking for existing Brand DNA in database...');
-        const existingResponse = await fetch(`${API_PREFIX}/brand-dna/${userId}`);
+        const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+        const headers: HeadersInit = {};
+        if (authData.token) {
+          headers['Authorization'] = `Bearer ${authData.token}`;
+        }
+        const existingResponse = await fetch(`${API_PREFIX}/brand-dna/${userId}`, { headers });
         if (existingResponse.ok) {
           const existingData = await existingResponse.json();
           if (existingData.dna) {
@@ -137,7 +155,12 @@ const BrandDNA: React.FC<BrandDNAProps> = ({ dna, setDna, userPlan = { plan: 'fr
       
       try {
         console.log('📦 Auto-loading existing Brand DNA for user:', userId);
-        const existingResponse = await fetch(`${API_PREFIX}/brand-dna/${userId}`);
+        const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+        const headers: HeadersInit = {};
+        if (authData.token) {
+          headers['Authorization'] = `Bearer ${authData.token}`;
+        }
+        const existingResponse = await fetch(`${API_PREFIX}/brand-dna/${userId}`, { headers });
         if (existingResponse.ok) {
           const existingData = await existingResponse.json();
           if (existingData.dna) {

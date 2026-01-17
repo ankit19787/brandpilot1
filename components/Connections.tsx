@@ -36,7 +36,11 @@ const Connections: React.FC<ConnectionsProps> = ({ onAction, onNavigate }) => {
     const fetchConnections = async () => {
       try {
         const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
-        const response = await fetch('http://localhost:3001/api/config');
+        const headers: HeadersInit = {};
+        if (authData.token) {
+          headers['Authorization'] = `Bearer ${authData.token}`;
+        }
+        const response = await fetch('http://localhost:3001/api/config', { headers });
         
         if (response.ok) {
           const configs = await response.json();
@@ -73,7 +77,7 @@ const Connections: React.FC<ConnectionsProps> = ({ onAction, onNavigate }) => {
         }
         
         // Fetch API statistics
-        const statsResponse = await fetch('http://localhost:3001/api/stats');
+        const statsResponse = await fetch('http://localhost:3001/api/stats', { headers });
         if (statsResponse.ok) {
           const stats = await statsResponse.json();
           setApiStats({
@@ -106,6 +110,12 @@ const Connections: React.FC<ConnectionsProps> = ({ onAction, onNavigate }) => {
       // Revoke - delete credentials from database
       setLoadingId(id);
       try {
+        const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+        const headers: HeadersInit = {};
+        if (authData.token) {
+          headers['Authorization'] = `Bearer ${authData.token}`;
+        }
+        
         const credentialKeys = {
           'x': ['x_api_key', 'x_api_secret', 'x_access_token', 'x_access_secret', 'x_token', 'twitter_api_url'],
           'facebook': ['facebook_token', 'facebook_page_id', 'facebook_app_id', 'facebook_app_secret', 'facebook_api_url', 'facebook_api_version'],
@@ -119,7 +129,8 @@ const Connections: React.FC<ConnectionsProps> = ({ onAction, onNavigate }) => {
         // Delete each credential from config
         for (const key of keysToDelete) {
           const response = await fetch(`http://localhost:3001/api/config/${key}`, {
-            method: 'DELETE'
+            method: 'DELETE',
+            headers
           });
           console.log(`Deleted ${key}:`, await response.json());
         }

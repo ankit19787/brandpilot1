@@ -1,6 +1,6 @@
-# Email Notification System
+# Email Notification System (with Authentication)
 
-BrandPilot includes a comprehensive email notification system that keeps users informed about important events.
+BrandPilot includes a comprehensive email notification system that keeps users informed about important events. **All email operations require Bearer token authentication.**
 
 ## Features
 
@@ -13,6 +13,19 @@ The email service sends beautifully designed HTML emails for:
 - 🚀 **Plan Upgraded** - Celebrates plan upgrades with new features
 - ⚠️ **Credits Low** - Warning when credits drop below 20%
 - 🧬 **Brand DNA Generated** - Confirms completion of brand analysis
+
+## Authentication Requirements
+
+**All email-related API endpoints require Bearer token authentication:**
+- `POST /api/send-email` - Send email notification (Bearer token required)
+- `GET /api/email-logs` - View email logs (Bearer token required)  
+- `POST /api/email/test` - Test email configuration (Bearer token required)
+
+**Authentication Headers**:
+```javascript
+Authorization: Bearer {your_token_here}
+Content-Type: application/json
+```
 
 ## Setup
 

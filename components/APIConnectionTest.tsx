@@ -47,9 +47,14 @@ const APIConnectionTest: React.FC = () => {
       };
       
       console.log('🧪 Testing monetization API...');
+      const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      if (authData.token) {
+        headers['Authorization'] = `Bearer ${authData.token}`;
+      }
       const response = await fetch('/api/monetization-plan', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           dna: testDNA,
           metrics: { currentFollowers: 1000, engagement: 3.0 },

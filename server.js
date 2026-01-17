@@ -10,6 +10,9 @@ import { PrismaClient } from '@prisma/client';
 import * as geminiServer from './services/gemini.server.js';
 import HyperPayService from './services/hyperPayService.js';
 import emailService from './services/emailService.js';
+import swaggerUi from 'swagger-ui-express';
+import swaggerJsdoc from 'swagger-jsdoc';
+import { swaggerOptions } from './swagger.config.js';
 
 // Load environment variables from .env.local or .env (whichever exists)
 import fs from 'fs';
@@ -17,6 +20,9 @@ import fs from 'fs';
 
 const app = express();
 const prisma = new PrismaClient();
+
+// Initialize Swagger
+const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
 // Attach prisma to app so routes can access it
 app.set('prisma', prisma);
@@ -63,6 +69,58 @@ app.use(cors());
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 
+// Swagger UI setup - accessible at /api-docs
+app.use('/api-docs', swaggerUi.serve);
+app.get('/api-docs', swaggerUi.setup(swaggerSpec, {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'BrandPilot OS API Docs',
+  customfavIcon: '/favicon.ico',
+  swaggerOptions: {
+    persistAuthorization: true,
+    displayRequestDuration: true,
+    docExpansion: 'none',
+    filter: true,
+    showExtensions: true,
+    showCommonExtensions: true,
+    tryItOutEnabled: true
+  }
+}));
+
+// Swagger JSON endpoint
+app.get('/api-docs.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.send(swaggerSpec);
+});
+
+/**
+ * @swagger
+ * /api/test-connection:
+ *   get:
+ *     summary: Test API connection
+ *     description: Verify that the frontend can successfully connect to the backend API
+ *     tags: [System]
+ *     security: []
+ *     responses:
+ *       200:
+ *         description: Connection successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: connected
+ *                 message:
+ *                   type: string
+ *                   example: Frontend successfully connected to backend!
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *                 serverPort:
+ *                   type: integer
+ *                   example: 3001
+ */
 // Test endpoint to verify frontend-backend connection
 app.get('/api/test-connection', (req, res) => {
   console.log('🧪 Test connection endpoint called from frontend');
@@ -116,12 +174,57 @@ app.use((req, res, next) => {
   next();
 });
 
+// Authentication middleware
+async function authenticateToken(req, res, next) {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.replace('Bearer ', '');
+  
+  if (!token) {
+    return res.status(401).json({ error: 'Access token required' });
+  }
+
+  try {
+    // Look up session in database
+    const session = await prisma.session.findUnique({ 
+      where: { token },
+      include: { user: true }
+    });
+
+    if (!session) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+
+    // Check if session has expired
+    if (session.expiresAt && new Date() > session.expiresAt) {
+      // Clean up expired session
+      await prisma.session.delete({ where: { token } });
+      return res.status(401).json({ error: 'Token expired' });
+    }
+
+    // Add user info to request
+    req.user = session.user;
+    req.sessionId = session.id;
+    next();
+  } catch (error) {
+    console.error('Token validation error:', error);
+    return res.status(403).json({ error: 'Token validation failed' });
+  }
+}
+
+// Admin role middleware (use after authenticateToken)
+function requireAdmin(req, res, next) {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  next();
+}
+
 app.use('/api', facebookTokenApi);
 app.use('/api', twitterProxyApi);
 app.use('/api', authApi);
 
 // Simplified Twitter post endpoint - handles OAuth server-side
-app.post('/api/twitter/post', async (req, res) => {
+app.post('/api/twitter/post', authenticateToken, async (req, res) => {
   console.log('=== /api/twitter/post endpoint hit ===');
   console.log('Request body:', req.body);
   try {
@@ -242,7 +345,7 @@ app.post('/api/validate-token', async (req, res) => {
 });
 
 // Config management endpoints
-app.get('/api/config', async (req, res) => {
+app.get('/api/config', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const configs = await prisma.config.findMany();
     res.json(configs);
@@ -251,7 +354,7 @@ app.get('/api/config', async (req, res) => {
   }
 });
 
-app.post('/api/config', async (req, res) => {
+app.post('/api/config', authenticateToken, requireAdmin, async (req, res) => {
   const { key, value } = req.body;
   if (!key || typeof value === 'undefined') {
     return res.status(400).json({ error: 'Key and value required' });
@@ -269,7 +372,7 @@ app.post('/api/config', async (req, res) => {
 });
 
 // Get single config value
-app.get('/api/config/:key', async (req, res) => {
+app.get('/api/config/:key', authenticateToken, requireAdmin, async (req, res) => {
   const { key } = req.params;
   try {
     const config = await prisma.config.findUnique({
@@ -284,7 +387,7 @@ app.get('/api/config/:key', async (req, res) => {
   }
 });
 
-app.delete('/api/config/:key', async (req, res) => {
+app.delete('/api/config/:key', authenticateToken, requireAdmin, async (req, res) => {
   const { key } = req.params;
   try {
     await prisma.config.delete({
@@ -298,7 +401,7 @@ app.delete('/api/config/:key', async (req, res) => {
 });
 
 // Gemini API endpoints
-app.post('/api/brand-dna', async (req, res) => {
+app.post('/api/brand-dna', authenticateToken, async (req, res) => {
   try {
     const { pastPosts, userId } = req.body;
     
@@ -413,7 +516,7 @@ app.post('/api/brand-dna', async (req, res) => {
 });
 
 // Get Brand DNA for user
-app.get('/api/brand-dna/:userId', async (req, res) => {
+app.get('/api/brand-dna/:userId', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.params;
     
@@ -441,7 +544,7 @@ app.get('/api/brand-dna/:userId', async (req, res) => {
   }
 });
 
-app.post('/api/content-strategy', async (req, res) => {
+app.post('/api/content-strategy', authenticateToken, async (req, res) => {
   try {
     const { dna, userId } = req.body;
     console.log('🔍 Content Strategy API called with userId:', userId, 'dna:', !!dna);
@@ -555,7 +658,7 @@ app.post('/api/content-strategy', async (req, res) => {
 });
 
 // Get Content Strategy for user
-app.get('/api/content-strategy/:userId', async (req, res) => {
+app.get('/api/content-strategy/:userId', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.params;
     
@@ -582,7 +685,7 @@ app.get('/api/content-strategy/:userId', async (req, res) => {
   }
 });
 
-app.post('/api/generate-post', async (req, res) => {
+app.post('/api/generate-post', authenticateToken, async (req, res) => {
   try {
     const { platform, topic, dna, userId } = req.body;
     
@@ -673,7 +776,7 @@ app.post('/api/generate-post', async (req, res) => {
   }
 });
 
-app.post('/api/generate-image', async (req, res) => {
+app.post('/api/generate-image', authenticateToken, async (req, res) => {
   try {
     const { topic, dna, userId } = req.body;
     
@@ -740,7 +843,7 @@ app.post('/api/generate-image', async (req, res) => {
   }
 });
 
-app.post('/api/publish', async (req, res) => {
+app.post('/api/publish', authenticateToken, async (req, res) => {
   try {
     const { platform, content, metadata } = req.body;
     console.log('Publish request:', { platform, content, metadata });
@@ -830,7 +933,7 @@ app.post('/api/publish', async (req, res) => {
   }
 });
 
-app.post('/api/monetization-plan', async (req, res) => {
+app.post('/api/monetization-plan', authenticateToken, async (req, res) => {
   try {
     const { dna, metrics, userId } = req.body;
     console.log('🔍 Monetization API called with userId:', userId, 'dna:', !!dna);
@@ -963,7 +1066,7 @@ app.post('/api/monetization-plan', async (req, res) => {
 });
 
 // Get Monetization Plan for user
-app.get('/api/monetization-plan/:userId', async (req, res) => {
+app.get('/api/monetization-plan/:userId', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.params;
     console.log('📥 GET monetization plan for userId:', userId);
@@ -1000,7 +1103,7 @@ app.get('/api/monetization-plan/:userId', async (req, res) => {
   }
 });
 
-app.post('/api/posts', async (req, res) => {
+app.post('/api/posts', authenticateToken, async (req, res) => {
   try {
     console.log('Creating post:', req.body);
     const result = await geminiServer.createPost(req.body);
@@ -1012,7 +1115,7 @@ app.post('/api/posts', async (req, res) => {
   }
 });
 
-app.get('/api/posts/all', async (req, res) => {
+app.get('/api/posts/all', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const result = await geminiServer.getAllPosts();
     res.json(result);
@@ -1022,7 +1125,7 @@ app.get('/api/posts/all', async (req, res) => {
   }
 });
 
-app.get('/api/posts/:userId', async (req, res) => {
+app.get('/api/posts/:userId', authenticateToken, async (req, res) => {
   try {
     const result = await geminiServer.getUserPosts(req.params.userId);
     res.json(result);
@@ -1032,7 +1135,7 @@ app.get('/api/posts/:userId', async (req, res) => {
 });
 
 // Update post status
-app.patch('/api/posts/:postId', async (req, res) => {
+app.patch('/api/posts/:postId', authenticateToken, async (req, res) => {
   try {
     const { postId } = req.params;
     const { 
@@ -1119,7 +1222,7 @@ app.patch('/api/posts/:postId', async (req, res) => {
   }
 });
 
-app.post('/api/logs', async (req, res) => {
+app.post('/api/logs', authenticateToken, async (req, res) => {
   try {
     const result = await geminiServer.createLog(req.body);
     res.json(result);
@@ -1128,7 +1231,7 @@ app.post('/api/logs', async (req, res) => {
   }
 });
 
-app.get('/api/logs/:userId', async (req, res) => {
+app.get('/api/logs/:userId', authenticateToken, async (req, res) => {
   try {
     const result = await geminiServer.getUserLogs(req.params.userId);
     res.json(result);
@@ -1138,7 +1241,7 @@ app.get('/api/logs/:userId', async (req, res) => {
 });
 
 // Email logs endpoint for admin panel
-app.get('/api/email-logs', async (req, res) => {
+app.get('/api/email-logs', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { limit = '50', status, type } = req.query;
     
@@ -1181,7 +1284,7 @@ app.get('/api/email-logs', async (req, res) => {
 // User management endpoints for admin panel
 
 // GET all users with statistics
-app.get('/api/users', async (req, res) => {
+app.get('/api/users', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const users = await prisma.user.findMany({
       select: {
@@ -1297,7 +1400,7 @@ app.post('/api/users', async (req, res) => {
 });
 
 // PATCH update user (role, plan, credits, etc.)
-app.patch('/api/users/:userId', async (req, res) => {
+app.patch('/api/users/:userId', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { userId } = req.params;
     const { username, email, role, plan, credits, maxCredits } = req.body;
@@ -1414,7 +1517,7 @@ app.patch('/api/users/:userId', async (req, res) => {
 });
 
 // DELETE user
-app.delete('/api/users/:userId', async (req, res) => {
+app.delete('/api/users/:userId', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { userId } = req.params;
     
@@ -1441,7 +1544,7 @@ app.delete('/api/users/:userId', async (req, res) => {
 });
 
 // Credit management endpoints
-app.get('/api/user/:userId/credits', async (req, res) => {
+app.get('/api/user/:userId/credits', authenticateToken, async (req, res) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.params.userId },
@@ -1456,7 +1559,7 @@ app.get('/api/user/:userId/credits', async (req, res) => {
   }
 });
 
-app.post('/api/user/credits/deduct', async (req, res) => {
+app.post('/api/user/credits/deduct', authenticateToken, async (req, res) => {
   try {
     const { userId, amount, action, description } = req.body;
     
@@ -1540,7 +1643,7 @@ app.post('/api/user/credits/deduct', async (req, res) => {
   }
 });
 
-app.get('/api/user/:userId/post-count', async (req, res) => {
+app.get('/api/user/:userId/post-count', authenticateToken, async (req, res) => {
   try {
     const startOfMonth = new Date();
     startOfMonth.setDate(1);
@@ -1559,7 +1662,7 @@ app.get('/api/user/:userId/post-count', async (req, res) => {
   }
 });
 
-app.post('/api/user/upgrade-plan', async (req, res) => {
+app.post('/api/user/upgrade-plan', authenticateToken, async (req, res) => {
   try {
     const { userId, newPlan, stripeCustomerId, stripeSubscriptionId } = req.body;
     
@@ -1629,7 +1732,7 @@ app.post('/api/user/upgrade-plan', async (req, res) => {
 });
 
 // Get credit transaction history
-app.get('/api/user/:userId/credit-history', async (req, res) => {
+app.get('/api/user/:userId/credit-history', authenticateToken, async (req, res) => {
   try {
     const { limit = 50, offset = 0 } = req.query;
     
@@ -1652,7 +1755,7 @@ app.get('/api/user/:userId/credit-history', async (req, res) => {
 });
 
 // Get user details by ID (for verification)
-app.get('/api/user/:userId', async (req, res) => {
+app.get('/api/user/:userId', authenticateToken, async (req, res) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.params.userId },
@@ -1679,7 +1782,7 @@ app.get('/api/user/:userId', async (req, res) => {
 });
 
 // Get subscription info
-app.get('/api/user/:userId/subscription', async (req, res) => {
+app.get('/api/user/:userId/subscription', authenticateToken, async (req, res) => {
   try {
     const subscription = await prisma.subscription.findFirst({
       where: { 
@@ -1696,7 +1799,7 @@ app.get('/api/user/:userId/subscription', async (req, res) => {
 });
 
 // Cancel subscription
-app.post('/api/user/subscription/cancel', async (req, res) => {
+app.post('/api/user/subscription/cancel', authenticateToken, async (req, res) => {
   try {
     const { userId, subscriptionId } = req.body;
     
@@ -1717,7 +1820,7 @@ app.post('/api/user/subscription/cancel', async (req, res) => {
 // ===== HyperPay Payment Integration =====
 
 // Create payment checkout
-app.post('/api/payment/checkout', async (req, res) => {
+app.post('/api/payment/checkout', authenticateToken, async (req, res) => {
   try {
     const { plan, billingCycle, amount, currency, userEmail } = req.body;
     
@@ -1824,7 +1927,7 @@ app.post('/api/payment/checkout', async (req, res) => {
 });
 
 // Get payment history for user
-app.get('/api/payment/history', async (req, res) => {
+app.get('/api/payment/history', authenticateToken, async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -1855,7 +1958,7 @@ app.get('/api/payment/history', async (req, res) => {
 });
 
 // Verify payment status
-app.get('/api/payment/verify/:checkoutId', async (req, res) => {
+app.get('/api/payment/verify/:checkoutId', authenticateToken, async (req, res) => {
   const { checkoutId } = req.params; // Define outside try block
   
   try {
@@ -2168,7 +2271,7 @@ app.post('/api/webhooks/hyperpay', async (req, res) => {
 });
 
 // Analytics endpoint
-app.get('/api/analytics/:userId', async (req, res) => {
+app.get('/api/analytics/:userId', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.params;
     
@@ -2292,7 +2395,7 @@ app.get('/api/analytics/:userId', async (req, res) => {
 });
 
 // API Statistics endpoint
-app.get('/api/stats', async (req, res) => {
+app.get('/api/stats', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const avgLatency = apiStats.totalRequests > 0 
       ? Math.round(apiStats.totalLatency / apiStats.totalRequests) 
@@ -2326,7 +2429,7 @@ app.get('/api/stats', async (req, res) => {
 });
 
 // User Profile endpoints
-app.get('/api/user/stats/:userId', async (req, res) => {
+app.get('/api/user/stats/:userId', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.params;
     
@@ -2375,7 +2478,7 @@ app.get('/api/user/stats/:userId', async (req, res) => {
   }
 });
 
-app.patch('/api/user/profile/:userId', async (req, res) => {
+app.patch('/api/user/profile/:userId', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.params;
     const { username, email, avatarStyle, currentPassword, newPassword } = req.body;

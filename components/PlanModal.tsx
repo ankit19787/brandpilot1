@@ -398,7 +398,10 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onAction, curren
       
       const response = await fetch('http://localhost:3001/api/payment/checkout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({
           plan: planId,
           billingCycle,

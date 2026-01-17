@@ -23,6 +23,14 @@ interface ContentStrategistProps {
 const ContentStrategist: React.FC<ContentStrategistProps> = ({ dna, onNavigate, userPlan = { plan: 'free', credits: 0, maxCredits: 1000 }, onUpgrade, onCreditsUpdate, userId }) => {
   const [strategy, setStrategy] = useState<ContentStrategy | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const getAuthHeaders = () => {
+    const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+    return {
+      'Content-Type': 'application/json',
+      ...(authData.token ? { 'Authorization': `Bearer ${authData.token}` } : {})
+    };
+  };
   
   const isLocked = !canUseFeature(userPlan.plan, 'contentStrategy');
   const hasEnoughCredits = userPlan.credits >= CREDIT_COSTS.contentStrategy;
@@ -36,7 +44,12 @@ const ContentStrategist: React.FC<ContentStrategistProps> = ({ dna, onNavigate, 
 
   const loadSavedStrategy = async () => {
     try {
-      const response = await fetch(`${API_PREFIX}/content-strategy/${userId}`);
+      const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+      const headers: HeadersInit = {};
+      if (authData.token) {
+        headers['Authorization'] = `Bearer ${authData.token}`;
+      }
+      const response = await fetch(`${API_PREFIX}/content-strategy/${userId}`, { headers });
       if (response.ok) {
         const savedStrategy = await response.json();
         setStrategy(savedStrategy);
@@ -65,7 +78,12 @@ const ContentStrategist: React.FC<ContentStrategistProps> = ({ dna, onNavigate, 
       // First, check if user has existing active Content Strategy
       if (userId) {
         console.log('📦 Checking for existing Content Strategy in database...');
-        const existingResponse = await fetch(`${API_PREFIX}/content-strategy/${userId}`);
+        const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+        const headers: HeadersInit = {};
+        if (authData.token) {
+          headers['Authorization'] = `Bearer ${authData.token}`;
+        }
+        const existingResponse = await fetch(`${API_PREFIX}/content-strategy/${userId}`, { headers });
         if (existingResponse.ok) {
           const existingData = await existingResponse.json();
           if (existingData.strategy) {
@@ -124,7 +142,12 @@ const ContentStrategist: React.FC<ContentStrategistProps> = ({ dna, onNavigate, 
       // Try to load strategy even without dna first, in case user has existing data
       try {
         console.log('📦 Auto-loading existing Content Strategy for user:', userId);
-        const existingResponse = await fetch(`${API_PREFIX}/content-strategy/${userId}`);
+        const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+        const headers: HeadersInit = {};
+        if (authData.token) {
+          headers['Authorization'] = `Bearer ${authData.token}`;
+        }
+        const existingResponse = await fetch(`${API_PREFIX}/content-strategy/${userId}`, { headers });
         if (existingResponse.ok) {
           const existingData = await existingResponse.json();
           if (existingData.strategy) {

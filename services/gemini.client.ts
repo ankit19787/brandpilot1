@@ -6,10 +6,19 @@ import { BrandDNA, ContentStrategy } from "../types";
 // Use relative path - Vite proxy will forward to backend
 const API_PREFIX = '/api';
 
+// Helper function to get auth headers
+const getAuthHeaders = () => {
+  const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+  return {
+    'Content-Type': 'application/json',
+    ...(authData.token ? { 'Authorization': `Bearer ${authData.token}` } : {})
+  };
+};
+
 export const analyzeBrandDNA = async (pastPosts: string, userId?: string): Promise<BrandDNA> => {
   const response = await fetch(`${API_PREFIX}/brand-dna`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders(),
     body: JSON.stringify({ pastPosts, userId })
   });
   
@@ -24,7 +33,7 @@ export const analyzeBrandDNA = async (pastPosts: string, userId?: string): Promi
 export const generateContentStrategy = async (dna: BrandDNA, userId?: string): Promise<ContentStrategy> => {
   const response = await fetch(`${API_PREFIX}/content-strategy`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders(),
     body: JSON.stringify({ dna, userId })
   });
   
@@ -39,7 +48,7 @@ export const generateContentStrategy = async (dna: BrandDNA, userId?: string): P
 export const generatePost = async (platform: string, topic: string, dna: BrandDNA, userId?: string): Promise<any> => {
   const response = await fetch(`${API_PREFIX}/generate-post`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders(),
     body: JSON.stringify({ platform, topic, dna, userId })
   });
   
@@ -56,7 +65,7 @@ export const generatePost = async (platform: string, topic: string, dna: BrandDN
 export const generateImage = async (topic: string, dna: BrandDNA, userId?: string): Promise<any> => {
   const response = await fetch(`${API_PREFIX}/generate-image`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders(),
     body: JSON.stringify({ topic, dna, userId })
   });
   
@@ -73,7 +82,7 @@ export const generateImage = async (topic: string, dna: BrandDNA, userId?: strin
 export const publishToPlatform = async (platform: string, content: string, metadata?: { imageUrl?: string; userId?: string }) => {
   const response = await fetch(`${API_PREFIX}/publish`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders(),
     body: JSON.stringify({ platform, content, metadata })
   });
   
@@ -88,7 +97,7 @@ export const publishToPlatform = async (platform: string, content: string, metad
 export const getMonetizationPlan = async (dna: BrandDNA, metrics: any, userId?: string): Promise<any> => {
   const response = await fetch(`${API_PREFIX}/monetization-plan`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders(),
     body: JSON.stringify({ dna, metrics, userId })
   });
   
@@ -127,7 +136,7 @@ export async function createPost({ userId, platform, content, imageUrl, status, 
 }) {
   const response = await fetch(`${API_PREFIX}/posts`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders(),
     body: JSON.stringify({ userId, platform, content, imageUrl, status, scheduledFor })
   });
   
@@ -140,7 +149,9 @@ export async function createPost({ userId, platform, content, imageUrl, status, 
 }
 
 export async function getUserPosts(userId: string) {
-  const response = await fetch(`${API_PREFIX}/posts/${userId}`);
+  const response = await fetch(`${API_PREFIX}/posts/${userId}`, {
+    headers: getAuthHeaders()
+  });
   
   if (!response.ok) {
     const error = await response.json();
@@ -157,7 +168,7 @@ export async function createLog({ userId, action, details }: {
 }) {
   const response = await fetch(`${API_PREFIX}/logs`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders(),
     body: JSON.stringify({ userId, action, details })
   });
   

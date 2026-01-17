@@ -50,7 +50,12 @@ const PerformanceBrain: React.FC<PerformanceBrainProps> = ({ onNavigate, userId 
       
       try {
         console.log('Fetching analytics for userId:', userId);
-        const response = await fetch(`http://localhost:3001/api/analytics/${userId}`);
+        const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+        const headers: HeadersInit = {};
+        if (authData.token) {
+          headers['Authorization'] = `Bearer ${authData.token}`;
+        }
+        const response = await fetch(`http://localhost:3001/api/analytics/${userId}`, { headers });
         if (response.ok) {
           const data = await response.json();
           console.log('Analytics data received:', data);

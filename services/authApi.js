@@ -1,5 +1,6 @@
 import express from 'express';
 import bodyParser from 'body-parser';
+import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
 
 const router = express.Router();
@@ -8,9 +9,18 @@ const prisma = new PrismaClient();
 // POST /api/login
 router.post('/login', async (req, res) => {
   const { username, password } = req.body;
+  
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username and password are required' });
+  }
+  
   // Find user in database
   const user = await prisma.user.findUnique({ where: { username } });
-  if (!user || user.passwordHash !== password) {
+  
+  // Hash the provided password using SHA-256 (same as registration)
+  const passwordHash = crypto.createHash('sha256').update(password).digest('hex');
+  
+  if (!user || user.passwordHash !== passwordHash) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
   // Create session in database

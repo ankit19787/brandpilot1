@@ -35,11 +35,17 @@ const EmailLogs: React.FC = () => {
   const fetchEmailLogs = async () => {
     setLoading(true);
     try {
+      const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+      const headers: HeadersInit = {};
+      if (authData.token) {
+        headers['Authorization'] = `Bearer ${authData.token}`;
+      }
+      
       const params = new URLSearchParams();
       if (filterStatus) params.append('status', filterStatus);
       if (filterType) params.append('type', filterType);
       
-      const response = await fetch(`/api/email-logs?${params.toString()}`);
+      const response = await fetch(`/api/email-logs?${params.toString()}`, { headers });
       const data = await response.json();
       
       setLogs(data.logs);
