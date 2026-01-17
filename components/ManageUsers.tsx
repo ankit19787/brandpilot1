@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Shield, Mail, CreditCard, Calendar, Edit2, Save, X, Search, Filter, UserPlus, Trash2, CheckCircle, XCircle } from 'lucide-react';
+import { Users, Mail, CreditCard, Calendar, Edit2, Save, X, Search, Filter, Trash2, CheckCircle, XCircle, UserPlus, Shield } from 'lucide-react';
 
 interface User {
   id: string;

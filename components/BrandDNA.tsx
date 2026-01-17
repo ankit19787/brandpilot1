@@ -1,8 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { Fingerprint, Loader2, Sparkles, CheckCircle2, MessageSquare, Play, GraduationCap, RotateCcw } from 'lucide-react';
+import { Fingerprint, Loader2, CheckCircle2, RotateCcw, Sparkles, GraduationCap, Play, MessageSquare } from 'lucide-react';
 import { analyzeBrandDNA } from '../services/gemini.client';
-import { deductCredits } from '../services/creditService';
 import { canUseFeature, CREDIT_COSTS } from '../services/planService';
 import { BrandDNA as BrandDNAType, SAMPLE_DNA, TUTORING_TIK_DNA } from '../types';
 import FeatureGate from './FeatureGate';
@@ -89,7 +88,7 @@ const BrandDNA: React.FC<BrandDNAProps> = ({ dna, setDna, userPlan = { plan: 'fr
       }
 
       console.log('🚀 No existing data found, generating new Brand DNA with userId:', userId);
-      const dnaResult = await analyzeBrandDNA(input, userId);
+      const dnaResult = await analyzeBrandDNA(input, userId) as any;
       
       // Handle response based on whether it includes credit info
       if (dnaResult.credits !== undefined) {
@@ -120,7 +119,7 @@ const BrandDNA: React.FC<BrandDNAProps> = ({ dna, setDna, userPlan = { plan: 'fr
     setLoading(true);
     try {
       console.log('🔄 Force regenerating Brand DNA...');
-      const dnaResult = await analyzeBrandDNA(input, userId);
+      const dnaResult = await analyzeBrandDNA(input, userId) as any;
       setDna(dnaResult);
       
       // Update credits if returned from API

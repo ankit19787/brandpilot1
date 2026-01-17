@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Mail, CheckCircle, XCircle, RefreshCw, Filter, Calendar, TrendingUp, AlertCircle } from 'lucide-react';
+import { Mail, CheckCircle, XCircle, RefreshCw, Filter, Calendar, AlertCircle, TrendingUp } from 'lucide-react';
 
 interface EmailLog {
   id: string;

@@ -9,22 +9,22 @@ async function configureHyperPay() {
   // HyperPay configuration values
   const configs = [
     {
-      key: 'HYPERPAY_ENTITY_ID',
+      key: 'hyperpay_entity_id',
       value: 'your_entity_id_here',
       description: 'HyperPay Entity ID from dashboard'
     },
     {
-      key: 'HYPERPAY_ACCESS_TOKEN',
+      key: 'hyperpay_access_token',
       value: 'your_access_token_here',
       description: 'HyperPay Access Token from dashboard'
     },
     {
-      key: 'HYPERPAY_MODE',
+      key: 'hyperpay_mode',
       value: 'test',
       description: 'Payment mode: test or live'
     },
     {
-      key: 'HYPERPAY_BRANDS',
+      key: 'hyperpay_brands',
       value: 'VISA,MASTER,MADA',
       description: 'Supported payment brands (comma-separated)'
     }

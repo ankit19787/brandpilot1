@@ -2,7 +2,6 @@
 import express from 'express';
 import bodyParser from 'body-parser';
 import cors from 'cors';
-import crypto from 'crypto';
 import facebookTokenApi from './services/facebookTokenApi.js';
 import twitterProxyApi from './services/twitterProxyApi.js';
 import authApi from './services/authApi.js';
@@ -15,7 +14,6 @@ import swaggerJsdoc from 'swagger-jsdoc';
 import { swaggerOptions } from './swagger.config.js';
 
 // Load environment variables from .env.local or .env (whichever exists)
-import fs from 'fs';
 // dotenv removed for Vercel/production. Use process.env only.
 
 const app = express();
@@ -38,7 +36,7 @@ async function getHyperPayService() {
     const configs = await prisma.config.findMany({
       where: {
         key: {
-          in: ['HYPERPAY_ENTITY_ID', 'HYPERPAY_ACCESS_TOKEN', 'HYPERPAY_MODE', 'HYPERPAY_BRANDS']
+          in: ['hyperpay_entity_id', 'hyperpay_access_token', 'hyperpay_mode', 'hyperpay_brands']
         }
       }
     });
@@ -46,15 +44,15 @@ async function getHyperPayService() {
     const configMap = {};
     configs.forEach(c => configMap[c.key] = c.value);
     
-    if (!configMap.HYPERPAY_ENTITY_ID || !configMap.HYPERPAY_ACCESS_TOKEN) {
+    if (!configMap.hyperpay_entity_id || !configMap.hyperpay_access_token) {
       return null;
     }
     
     const hyperPayConfig = {
-      entityId: configMap.HYPERPAY_ENTITY_ID,
-      accessToken: configMap.HYPERPAY_ACCESS_TOKEN,
-      mode: configMap.HYPERPAY_MODE || 'test',
-      brands: (configMap.HYPERPAY_BRANDS || 'VISA,MASTER').split(',')
+      entityId: configMap.hyperpay_entity_id,
+      accessToken: configMap.hyperpay_access_token,
+      mode: configMap.hyperpay_mode || 'test',
+      brands: (configMap.hyperpay_brands || 'VISA,MASTER').split(',')
     };
     
     hyperPayService = new HyperPayService(hyperPayConfig);

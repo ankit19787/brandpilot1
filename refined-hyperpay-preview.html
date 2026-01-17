@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>✨ Refined HyperPay Payment Form</title>
+    <link rel="stylesheet" href="/styles.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            padding: 40px 20px;
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            max-width: 600px;
+            width: 100%;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+        .header h1 {
+            color: #1f2937;
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .header p {
+            color: #6b7280;
+            font-size: 16px;
+        }
+        .preview-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 24px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="preview-badge">✨ Professional Styling Applied</div>
+            <h1>Payment Form Preview</h1>
+            <p>Your HyperPay form now has professional, clean styling that matches your brand</p>
+        </div>
+        
+        <div class="paymentWidgets">
+            <h3>Complete Your Payment</h3>
+            
+            <div style="margin-bottom: 16px;">
+                <label>Card Number</label>
+                <input type="text" class="wpwl-control" placeholder="1234 5678 9012 3456" value="4111 1111 1111 1111">
+            </div>
+            
+            <div style="display: flex; gap: 16px; margin-bottom: 16px;">
+                <div style="flex: 1;">
+                    <label>Expiry Date</label>
+                    <input type="text" class="wpwl-control" placeholder="MM/YY" value="12/25">
+                </div>
+                <div style="flex: 1;">
+                    <label>CVV</label>
+                    <input type="text" class="wpwl-control" placeholder="123" value="123">
+                </div>
+            </div>
+            
+            <div style="margin-bottom: 16px;">
+                <label>Card Holder Name</label>
+                <input type="text" class="wpwl-control" placeholder="John Doe" value="John Doe">
+            </div>
+            
+            <div style="margin-bottom: 16px;">
+                <label>Country</label>
+                <select class="wpwl-control">
+                    <option>United States</option>
+                    <option>Canada</option>
+                    <option>United Kingdom</option>
+                </select>
+            </div>
+            
+            <div style="margin-bottom: 16px;">
+                <label>Mobile Phone Number</label>
+                <input type="tel" class="wpwl-control" placeholder="+1 (555) 123-4567" value="+1 (555) 123-4567">
+            </div>
+            
+            <div style="margin-bottom: 24px;">
+                <label>Date of Birth</label>
+                <input type="text" class="wpwl-control" placeholder="DD/MM/YYYY" value="01/01/1990">
+            </div>
+            
+            <div style="margin-bottom: 16px;">
+                <label style="display: flex; align-items: center; font-size: 14px; color: #6b7280;">
+                    <input type="checkbox" style="margin-right: 8px; width: auto !important;" checked>
+                    I agree to the terms and conditions
+                </label>
+            </div>
+            
+            <button type="submit" class="wpwl-submit">
+                Complete Payment - $29.99
+            </button>
+        </div>
+        
+        <div style="text-align: center; margin-top: 24px; color: #6b7280; font-size: 14px;">
+            🔒 Your payment information is secure and encrypted
+        </div>
+    </div>
+
+    <script>
+        console.log('🎨 Refined HyperPay styling loaded!');
+        console.log('✨ Form now has professional appearance with:');
+        console.log('   • Clean card container with subtle shadow');
+        console.log('   • Consistent Inter font throughout');
+        console.log('   • Refined input fields with proper focus states');
+        console.log('   • Professional gradient button');
+        console.log('   • Responsive design for mobile devices');
+        
+        // Add interaction feedback
+        document.querySelectorAll('.wpwl-control').forEach(input => {
+            input.addEventListener('focus', () => {
+                console.log(`Field "${input.placeholder}" focused with refined styling`);
+            });
+        });
+    </script>
+</body>
+</html>

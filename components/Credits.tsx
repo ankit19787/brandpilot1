@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Coins, TrendingUp, TrendingDown, RefreshCw, Sparkles, Image, FileText, Calendar } from 'lucide-react';
+import { Coins, TrendingUp, TrendingDown, RefreshCw, Image, FileText, Calendar, Sparkles } from 'lucide-react';
 
 interface CreditTransaction {
   id: string;

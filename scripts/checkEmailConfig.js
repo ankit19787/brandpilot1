@@ -7,7 +7,7 @@ async function checkEmailConfig() {
     const configs = await prisma.config.findMany({
       where: {
         key: {
-          startsWith: 'EMAIL_'
+          startsWith: 'email_'
         }
       }
     });
@@ -21,7 +21,7 @@ async function checkEmailConfig() {
       return;
     }
     
-    const required = ['EMAIL_HOST', 'EMAIL_USER', 'EMAIL_PASS'];
+    const required = ['email_host', 'email_user', 'email_pass'];
     const configMap = {};
     
     configs.forEach(c => {

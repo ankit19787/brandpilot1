@@ -9,18 +9,18 @@ async function updateHyperPayConfig() {
   if (args.length < 2) {
     console.log('Usage: node scripts/updateHyperPayConfig.js <KEY> <VALUE>');
     console.log('\nAvailable keys:');
-    console.log('  HYPERPAY_ENTITY_ID      - Your HyperPay Entity ID');
-    console.log('  HYPERPAY_ACCESS_TOKEN   - Your HyperPay Access Token');
-    console.log('  HYPERPAY_MODE           - test or live');
-    console.log('  HYPERPAY_BRANDS         - VISA,MASTER,MADA');
+    console.log('  hyperpay_entity_id      - Your HyperPay Entity ID');
+    console.log('  hyperpay_access_token   - Your HyperPay Access Token');
+    console.log('  hyperpay_mode           - test or live');
+    console.log('  hyperpay_brands         - VISA,MASTER,MADA');
     console.log('\nExample:');
-    console.log('  node scripts/updateHyperPayConfig.js HYPERPAY_ENTITY_ID "8ac7a4c882f47e760182f52f66f81234"');
+    console.log('  node scripts/updateHyperPayConfig.js hyperpay_entity_id "8ac7a4c882f47e760182f52f66f81234"');
     process.exit(1);
   }
 
   const [key, value] = args;
   
-  const validKeys = ['HYPERPAY_ENTITY_ID', 'HYPERPAY_ACCESS_TOKEN', 'HYPERPAY_MODE', 'HYPERPAY_BRANDS'];
+  const validKeys = ['hyperpay_entity_id', 'hyperpay_access_token', 'hyperpay_mode', 'hyperpay_brands'];
   
   if (!validKeys.includes(key)) {
     console.error(`❌ Invalid key: ${key}`);
@@ -35,7 +35,7 @@ async function updateHyperPayConfig() {
       create: { key, value }
     });
     
-    const displayValue = key === 'HYPERPAY_ACCESS_TOKEN' 
+    const displayValue = key === 'hyperpay_access_token' 
       ? value.substring(0, 10) + '...' 
       : value;
     

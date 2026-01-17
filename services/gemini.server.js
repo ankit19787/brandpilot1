@@ -212,7 +212,8 @@ export async function fetchFacebookTokenFromBackend() {
 export async function refreshFacebookToken(longLivedToken) {
   const appId = await getConfigValue('facebook_app_id');
   const appSecret = await getConfigValue('facebook_app_secret');
-  const url = `https://graph.facebook.com/v20.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${longLivedToken}`;
+  const { facebookApiUrl, facebookApiVersion } = await getPlatformConfig();
+  const url = `${facebookApiUrl}/${facebookApiVersion}/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${longLivedToken}`;
   const res = await fetch(url);
   const data = await res.json();
   if (!res.ok || !data.access_token) {
@@ -225,7 +226,8 @@ export async function ensureLongLivedFacebookToken(token) {
   if (token.length < 120) {
     const appId = await getConfigValue('facebook_app_id');
     const appSecret = await getConfigValue('facebook_app_secret');
-    const url = `https://graph.facebook.com/v20.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${token}`;
+    const { facebookApiUrl, facebookApiVersion } = await getPlatformConfig();
+    const url = `${facebookApiUrl}/${facebookApiVersion}/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${token}`;
     const res = await fetch(url);
     const data = await res.json();
     if (!res.ok || !data.access_token) {
@@ -423,7 +425,7 @@ export async function publishToPlatform(platform, content, metadata) {
           return { 
             status: 201, 
             id: data2.id, 
-            url: `instagram.com/p/${data2.id}`,
+            url: `https://instagram.com/p/${data2.id}`,
             platformResponse: publishResult 
           };
         } else {
@@ -458,7 +460,7 @@ export async function publishToPlatform(platform, content, metadata) {
             return { 
               status: 201, 
               id: data.id, 
-              url: `facebook.com/${data.id}`,
+              url: `https://facebook.com/${data.id}`,
               platformResponse: publishResult 
             };
           } else {
@@ -490,7 +492,7 @@ export async function publishToPlatform(platform, content, metadata) {
             return { 
               status: 201, 
               id: data.id, 
-              url: `facebook.com/${data.id}`,
+              url: `https://facebook.com/${data.id}`,
               platformResponse: publishResult 
             };
           }

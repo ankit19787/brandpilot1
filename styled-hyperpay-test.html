@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HyperPay Styled Widget Test</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+        }
+        
+        h1 {
+            color: #334155;
+            margin-bottom: 20px;
+            font-weight: 700;
+            text-align: center;
+        }
+        
+        .test-btn {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            color: white;
+            padding: 16px 32px;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 30px;
+            display: block;
+            width: 100%;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 14px rgba(99, 102, 241, 0.3);
+        }
+        
+        .test-btn:hover {
+            background: linear-gradient(135deg, #5855eb 0%, #7c3aed 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+        }
+        
+        .test-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        #payment-form-container {
+            margin-top: 30px;
+            padding: 30px;
+            background: #f8fafc;
+            border-radius: 16px;
+            display: none;
+            border: 1px solid #e2e8f0;
+        }
+        
+        #payment-form-container.active {
+            display: block;
+        }
+        
+        .status {
+            padding: 16px;
+            margin: 20px 0;
+            border-radius: 12px;
+            font-weight: 500;
+            text-align: center;
+        }
+        
+        .status.info {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #3b82f6;
+        }
+        
+        .status.success {
+            background: #dcfce7;
+            color: #166534;
+            border: 1px solid #22c55e;
+        }
+        
+        .status.error {
+            background: #fef2f2;
+            color: #dc2626;
+            border: 1px solid #ef4444;
+        }
+        
+        .info-box {
+            background: #f0f9ff;
+            border: 1px solid #0ea5e9;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        
+        .test-cards {
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            border-radius: 12px;
+            padding: 16px;
+            margin-top: 20px;
+            font-size: 14px;
+        }
+        
+        /* Include the HyperPay custom styles */
+        .paymentWidgets {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+            background: transparent !important;
+            border: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+
+        .paymentWidgets input[type="text"],
+        .paymentWidgets input[type="tel"],
+        .paymentWidgets input[type="email"],
+        .paymentWidgets select {
+            width: 100% !important;
+            padding: 12px 16px !important;
+            border: 2px solid #e2e8f0 !important;
+            border-radius: 12px !important;
+            font-size: 16px !important;
+            font-family: 'Inter', sans-serif !important;
+            background: white !important;
+            color: #334155 !important;
+            transition: all 0.2s ease !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+            margin-bottom: 16px !important;
+        }
+
+        .paymentWidgets input[type="text"]:focus,
+        .paymentWidgets input[type="tel"]:focus,
+        .paymentWidgets input[type="email"]:focus,
+        .paymentWidgets select:focus {
+            outline: none !important;
+            border-color: #6366f1 !important;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1), 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+            transform: translateY(-1px) !important;
+        }
+
+        .paymentWidgets label {
+            display: block !important;
+            margin-bottom: 6px !important;
+            font-size: 14px !important;
+            font-weight: 600 !important;
+            color: #475569 !important;
+            font-family: 'Inter', sans-serif !important;
+        }
+
+        .paymentWidgets input[type="submit"],
+        .paymentWidgets input[type="button"],
+        .paymentWidgets button[type="submit"] {
+            width: 100% !important;
+            padding: 16px 24px !important;
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%) !important;
+            color: white !important;
+            border: none !important;
+            border-radius: 12px !important;
+            font-size: 16px !important;
+            font-weight: 600 !important;
+            font-family: 'Inter', sans-serif !important;
+            cursor: pointer !important;
+            transition: all 0.2s ease !important;
+            margin-top: 8px !important;
+            box-shadow: 0 4px 14px rgba(99, 102, 241, 0.3) !important;
+        }
+
+        .paymentWidgets input[type="submit"]:hover,
+        .paymentWidgets input[type="button"]:hover,
+        .paymentWidgets button[type="submit"]:hover {
+            background: linear-gradient(135deg, #5855eb 0%, #7c3aed 100%) !important;
+            transform: translateY(-2px) !important;
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4) !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎨 HyperPay Styled Widget Test</h1>
+        
+        <div class="info-box">
+            <strong>🎯 What's New:</strong>
+            <ul style="margin: 10px 0; padding-left: 20px;">
+                <li>✨ Custom styling matching your app theme</li>
+                <li>🎨 Rounded input fields with Inter font</li>
+                <li>💜 Indigo focus states and gradient buttons</li>
+                <li>📱 Mobile-responsive design</li>
+                <li>🔒 Professional payment form appearance</li>
+            </ul>
+        </div>
+        
+        <div id="status"></div>
+        
+        <button id="createCheckout" class="test-btn" onclick="createTestCheckout()">
+            🚀 Create Styled Checkout
+        </button>
+        
+        <div id="payment-form-container">
+            <h3 style="color: #334155; margin-bottom: 16px;">💳 Enter Payment Details</h3>
+            <p style="color: #64748b; margin-bottom: 24px;">Experience the new styled payment form:</p>
+            
+            <form action="styled-hyperpay-test.html" class="paymentWidgets" data-brands="VISA MASTER MADA">
+                <!-- HyperPay will inject styled form fields here -->
+            </form>
+            
+            <div class="test-cards">
+                <strong>🧪 Test Card Numbers:</strong><br>
+                <strong>VISA:</strong> 4200 0000 0000 0000<br>
+                <strong>MasterCard:</strong> 5300 0000 0000 0006<br>
+                <strong>CVV:</strong> 123 | <strong>Expiry:</strong> 12/25<br>
+                <strong>Holder:</strong> Any name
+            </div>
+        </div>
+        
+        <div id="debug-info" style="margin-top: 20px; font-size: 12px; color: #64748b; background: #f8fafc; padding: 16px; border-radius: 8px; display: none;">
+            <strong>🔍 Debug Information:</strong><br>
+            <div id="debug-content"></div>
+        </div>
+    </div>
+
+    <script>
+        let debugEnabled = true;
+        
+        function showStatus(msg, type) {
+            const el = document.getElementById('status');
+            el.textContent = msg;
+            el.className = `status ${type}`;
+            el.style.display = 'block';
+        }
+        
+        function showDebug(msg) {
+            if (!debugEnabled) return;
+            console.log('DEBUG:', msg);
+            const debugInfo = document.getElementById('debug-info');
+            const debugContent = document.getElementById('debug-content');
+            debugInfo.style.display = 'block';
+            debugContent.innerHTML += msg + '<br>';
+        }
+        
+        async function createTestCheckout() {
+            const button = document.getElementById('createCheckout');
+            button.disabled = true;
+            button.textContent = '⏳ Creating checkout...';
+            
+            try {
+                showStatus('🔄 Creating secure checkout session...', 'info');
+                showDebug('Calling checkout API...');
+                
+                const response = await fetch('http://localhost:3001/api/payment/checkout', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        plan: 'pro',
+                        billingCycle: 'monthly',
+                        amount: 100,
+                        currency: 'SAR',
+                        userEmail: 'test@example.com'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to create checkout');
+                }
+                
+                showDebug(`✅ Checkout created: ${data.checkoutId}`);
+                showDebug(`📜 Script URL: ${data.scriptUrl}`);
+                showDebug(`💳 Brands: ${data.brands.join(', ')}`);
+                
+                // Update form brands
+                const form = document.querySelector('.paymentWidgets');
+                form.setAttribute('data-brands', data.brands.join(' '));
+                
+                showStatus('🎨 Loading styled payment widget...', 'info');
+                
+                // Load HyperPay widget script with EU test configuration
+                const scriptUrl = `https://eu-test.oppwa.com/v1/paymentWidgets.js?checkoutId=${data.checkoutId}`;
+                showDebug(`🔗 Loading script: ${scriptUrl}`);
+                
+                // Remove existing script if any
+                const existingScript = document.querySelector('script[src*="paymentWidgets.js"]');
+                if (existingScript) {
+                    existingScript.remove();
+                    showDebug('🗑️ Removed existing script');
+                }
+                
+                const script = document.createElement('script');
+                script.src = scriptUrl;
+                script.onload = () => {
+                    showDebug('✅ Script loaded successfully');
+                    showDebug('⏳ Waiting for widget to initialize...');
+                    
+                    // Check if widget injected content
+                    setTimeout(() => {
+                        const form = document.querySelector('.paymentWidgets');
+                        const formHtml = form?.innerHTML;
+                        
+                        showDebug(`📊 Form HTML length: ${formHtml?.length || 0} chars`);
+                        
+                        if (formHtml && formHtml.trim().length > 0) {
+                            showStatus('🎉 Styled payment form ready! Notice the beautiful design matching your app theme.', 'success');
+                            form.classList.add('widget-loaded');
+                            document.getElementById('payment-form-container').classList.add('active');
+                        } else {
+                            showStatus('⚠️ Widget script loaded but form not populated. Check console for details.', 'error');
+                            showDebug('❌ HyperPay might have returned an error');
+                            showDebug('💡 Check: 1. Checkout ID validity 2. Network connectivity 3. HyperPay service status');
+                        }
+                        
+                        button.disabled = false;
+                        button.textContent = '🔄 Create Another Test';
+                    }, 2000);
+                };
+                
+                script.onerror = () => {
+                    showStatus('❌ Failed to load payment widget script. Check network connection.', 'error');
+                    showDebug('💥 Script loading failed');
+                    button.disabled = false;
+                    button.textContent = '🔄 Retry';
+                };
+                
+                document.body.appendChild(script);
+                
+            } catch (error) {
+                showStatus(`❌ Error: ${error.message}`, 'error');
+                showDebug(`💥 Error details: ${error.message}`);
+                button.disabled = false;
+                button.textContent = '🔄 Retry';
+            }
+        }
+        
+        // Show initial instructions
+        showStatus('👋 Click the button above to test the new styled HyperPay widget!', 'info');
+        showDebug('🎨 Custom styling loaded and ready');
+    </script>
+</body>
+</html>

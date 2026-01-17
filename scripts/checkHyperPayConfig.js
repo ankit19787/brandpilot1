@@ -9,7 +9,7 @@ async function checkHyperPayConfig() {
     const configs = await prisma.config.findMany({
       where: {
         key: {
-          startsWith: 'HYPERPAY'
+          startsWith: 'hyperpay'
         }
       }
     });
@@ -23,14 +23,14 @@ async function checkHyperPayConfig() {
     
     console.log('Found HyperPay configurations:');
     configs.forEach(config => {
-      const displayValue = config.key === 'HYPERPAY_ACCESS_TOKEN' 
+      const displayValue = config.key === 'hyperpay_access_token' 
         ? '***' + config.value.slice(-4) 
         : config.value;
       console.log(`  ${config.key}: ${displayValue}`);
     });
     
     // Check if all required fields are present
-    const requiredKeys = ['HYPERPAY_ENTITY_ID', 'HYPERPAY_ACCESS_TOKEN'];
+    const requiredKeys = ['hyperpay_entity_id', 'hyperpay_access_token'];
     const foundKeys = configs.map(c => c.key);
     const missingKeys = requiredKeys.filter(k => !foundKeys.includes(k));
     
@@ -44,15 +44,15 @@ async function checkHyperPayConfig() {
       const configMap = {};
       configs.forEach(c => configMap[c.key] = c.value);
       
-      const mode = configMap.HYPERPAY_MODE || 'test';
+      const mode = configMap.hyperpay_mode || 'test';
       const baseUrl = mode === 'live' 
         ? 'https://oppwa.com/v1'
         : 'https://test.oppwa.com/v1';
       
       console.log('Mode:', mode);
       console.log('Base URL:', baseUrl);
-      console.log('Entity ID:', configMap.HYPERPAY_ENTITY_ID);
-      console.log('Brands:', configMap.HYPERPAY_BRANDS || 'VISA,MASTER');
+      console.log('Entity ID:', configMap.hyperpay_entity_id);
+      console.log('Brands:', configMap.hyperpay_brands || 'VISA,MASTER');
     }
     
   } catch (error) {

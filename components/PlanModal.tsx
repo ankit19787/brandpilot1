@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Check, Zap, Crown, Building2, Sparkles, ArrowRight, CreditCard, Loader2 } from 'lucide-react';
-import { initiatePayment, verifyPayment } from '../services/hyperPayService.ts';
+import { X, Check, Zap, Crown, Building2, ArrowRight, CreditCard, Loader2, Sparkles } from 'lucide-react';
+import { initiatePayment, verifyPayment } from '../services/hyperPayService';
 
 interface PlanModalProps {
   isOpen: boolean;
@@ -202,15 +202,28 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onAction, curren
       script.onload = () => {
         console.log('HyperPay widget script loaded successfully');
         
+        // Add a loading class to the form
+        const form = document.querySelector('.paymentWidgets') as HTMLElement;
+        if (form) {
+          form.classList.add('loading');
+        }
+        
         setTimeout(() => {
           const formContent = document.querySelector('.paymentWidgets')?.innerHTML;
           console.log('Form content after init:', formContent ? 'Widget injected!' : 'Widget NOT injected');
+          
+          // Remove loading class
+          if (form) {
+            form.classList.remove('loading');
+          }
+          
           setPaymentWidgetLoaded(true);
+          setIsPaymentLoading(false); // Hide the loading state
           
           // Scroll to payment form
           const paymentSection = document.getElementById('hyperpay-form-container');
           paymentSection?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }, 1000);
+        }, 1500); // Increased timeout to allow HyperPay to fully initialize
       };
       script.onerror = () => {
         console.error('Failed to load HyperPay widget script');
@@ -594,10 +607,10 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onAction, curren
                   <p className="text-slate-600">Loading payment form...</p>
                 </div>
               ) : (
-                <div className="bg-white rounded-2xl shadow-xl p-8">
+                <div className="bg-white rounded-2xl shadow-xl p-8 border border-slate-200">
                   {/* HyperPay payment widget will be rendered here */}
                   {/* The script automatically looks for forms with class "paymentWidgets" */}
-                  <div id="hyperpay-form-container" style={{ minHeight: '400px' }}>
+                  <div id="hyperpay-form-container" className="relative" style={{ minHeight: '400px' }}>
                     <form 
                       id="hyperpay-payment-form"
                       action={`${window.location.origin}${window.location.pathname}`}
@@ -606,6 +619,13 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onAction, curren
                       style={{ display: 'block', width: '100%' }}
                     >
                       {/* HyperPay will inject the payment form fields here automatically */}
+                      {!paymentWidgetLoaded && (
+                        <div className="flex flex-col items-center justify-center py-16 text-slate-500">
+                          <Loader2 className="animate-spin mb-4" size={32} />
+                          <p className="text-sm">Setting up secure payment form...</p>
+                          <p className="text-xs mt-2">Powered by HyperPay</p>
+                        </div>
+                      )}
                     </form>
                   </div>
                   

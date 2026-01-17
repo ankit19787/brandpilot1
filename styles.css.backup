@@ -1,0 +1,399 @@
+@import "tailwindcss";
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: #f8fafc;
+}
+
+.glass-panel {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.animate-in {
+  animation: slideIn 0.3s ease-out forwards;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Clean HyperPay Payment Form Styling - VISUAL ONLY, NO STRUCTURE CHANGES */
+
+.paymentWidgets input[type="submit"]:hover,
+.paymentWidgets input[type="button"]:hover,
+.paymentWidgets button[type="submit"]:hover {
+  background: linear-gradient(135deg, #5855eb 0%, #7c3aed 100%) !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4) !important;
+}
+
+.paymentWidgets input[type="submit"]:active,
+.paymentWidgets input[type="button"]:active,
+.paymentWidgets button[type="submit"]:active {
+  transform: translateY(0) !important;
+  box-shadow: 0 2px 10px rgba(99, 102, 241, 0.3) !important;
+}
+
+/* Style error messages */
+.paymentWidgets .error,
+.paymentWidgets .wpwl-form-error {
+  color: #ef4444 !important;
+  font-size: 13px !important;
+  margin-top: 4px !important;
+  margin-bottom: 8px !important;
+  font-family: 'Inter', sans-serif !important;
+}
+
+/* Style the payment brand icons */
+.paymentWidgets .wpwl-brand {
+  margin: 8px 4px !important;
+  border-radius: 8px !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Custom styling for different field types */
+.paymentWidgets input[placeholder*="Card number"],
+.paymentWidgets input[placeholder*="card number"],
+.paymentWidgets input[name*="number"] {
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgb(75, 85, 99)" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>') !important;
+  background-repeat: no-repeat !important;
+  background-position: right 12px center !important;
+  background-size: 20px !important;
+  padding-right: 48px !important;
+}
+
+.paymentWidgets input[placeholder*="CVV"],
+.paymentWidgets input[placeholder*="cvv"],
+.paymentWidgets input[name*="cvv"] {
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgb(75, 85, 99)" stroke-width="2"><path d="M9 12l2 2 4-4"></path><path d="M21 12c-1.2 0-3-.6-3-3s1.8-3 3-3 3 .6 3 3-1.8 3-3 3"></path><path d="M3 12c1.2 0 3-.6 3-3s-1.8-3-3-3-3 .6-3 3 1.8 3 3 3"></path></svg>') !important;
+  background-repeat: no-repeat !important;
+  background-position: right 12px center !important;
+  background-size: 18px !important;
+  padding-right: 44px !important;
+}
+
+/* Form layout improvements */
+.paymentWidgets > div,
+.paymentWidgets > fieldset {
+  margin-bottom: 20px !important;
+}
+
+/* Responsive design for mobile */
+@media (max-width: 640px) {
+  .paymentWidgets input[type="text"],
+  .paymentWidgets input[type="tel"],
+  .paymentWidgets input[type="email"],
+  .paymentWidgets select {
+    font-size: 16px !important; /* Prevents zoom on iOS */
+    padding: 14px 16px !important;
+  }
+  
+  .paymentWidgets input[type="submit"],
+  .paymentWidgets input[type="button"],
+  .paymentWidgets button[type="submit"] {
+    padding: 18px 24px !important;
+    font-size: 16px !important;
+  }
+}
+
+/* Loading state styling */
+.paymentWidgets.loading {
+  opacity: 0.7 !important;
+  pointer-events: none !important;
+}
+
+.paymentWidgets.loading::after {
+  content: '' !important;
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  width: 20px !important;
+  height: 20px !important;
+  margin: -10px 0 0 -10px !important;
+  border: 2px solid transparent !important;
+  border-top-color: #6366f1 !important;
+  border-radius: 50% !important;
+  animation: spin 1s linear infinite !important;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Dark mode support for future */
+@media (prefers-color-scheme: dark) {
+  .paymentWidgets input[type="text"],
+  .paymentWidgets input[type="tel"],
+  .paymentWidgets input[type="email"],
+  .paymentWidgets select {
+    background: #1e293b !important;
+    border-color: #475569 !important;
+    color: #f1f5f9 !important;
+  }
+  
+  .paymentWidgets label {
+    color: #cbd5e1 !important;
+  }
+}
+
+/* Ensure form container has proper styling */
+#hyperpay-form-container {
+  position: relative !important;
+}
+
+/* Enhanced HyperPay Widget Styling with Maximum Specificity */
+/* Force override HyperPay default styles */
+
+/* Universal reset for HyperPay form */
+.paymentWidgets *,
+form.paymentWidgets *,
+div .paymentWidgets *,
+.wpwl-form *,
+.wpwl-wrapper * {
+  box-sizing: border-box !important;
+  font-family: 'Inter', sans-serif !important;
+}
+
+/* Enhanced input field styling with multiple selectors */
+.paymentWidgets input[type="text"],
+.paymentWidgets input[type="tel"],
+.paymentWidgets input[type="email"],
+.paymentWidgets input[type="password"],
+.paymentWidgets select,
+form.paymentWidgets input,
+div .paymentWidgets input,
+.wpwl-control input,
+.wpwl-form input {
+  width: 100% !important;
+  padding: 12px 16px !important;
+  border: 2px solid #e2e8f0 !important;
+  border-radius: 12px !important;
+  font-size: 16px !important;
+  font-family: 'Inter', sans-serif !important;
+  background: white !important;
+  background-color: white !important;
+  color: #334155 !important;
+  transition: all 0.2s ease !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+  margin-bottom: 16px !important;
+  outline: none !important;
+  line-height: normal !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+}
+
+/* Enhanced focus states */
+.paymentWidgets input:focus,
+form.paymentWidgets input:focus,
+div .paymentWidgets input:focus,
+.wpwl-control input:focus,
+.wpwl-form input:focus {
+  outline: none !important;
+  border-color: #6366f1 !important;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1), 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+  transform: translateY(-1px) !important;
+}
+
+/* Enhanced button styling with maximum specificity */
+.paymentWidgets button,
+.paymentWidgets input[type="submit"],
+.paymentWidgets input[type="button"],
+form.paymentWidgets button,
+div .paymentWidgets button,
+.wpwl-button,
+.wpwl-form button,
+.wpwl-form input[type="submit"] {
+  width: 100% !important;
+  padding: 16px 24px !important;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%) !important;
+  background-color: #6366f1 !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 12px !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  font-family: 'Inter', sans-serif !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  margin-top: 8px !important;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.3) !important;
+  text-transform: none !important;
+  text-align: center !important;
+  outline: none !important;
+  line-height: normal !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+}
+
+.paymentWidgets button:hover,
+.paymentWidgets input[type="submit"]:hover,
+form.paymentWidgets button:hover,
+div .paymentWidgets button:hover,
+.wpwl-button:hover,
+.wpwl-form button:hover {
+  background: linear-gradient(135deg, #5855eb 0%, #7c3aed 100%) !important;
+  background-color: #5855eb !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4) !important;
+}
+
+/* Force override any HyperPay wrapper styles */
+.wpwl-form,
+.wpwl-wrapper,
+.wpwl-control,
+.wpwl-group {
+  background: transparent !important;
+  border: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  font-family: 'Inter', sans-serif !important;
+}
+
+/* Simple, Clean HyperPay Widget Styling - Optimized for Modal */
+
+/* Main container - Clean and simple, works in modal */
+.paymentWidgets,
+.wpwl-form,
+.wpwl-wrapper,
+#hyperpay-form-container .paymentWidgets,
+#hyperpay-payment-form {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  font-family: 'Inter', sans-serif !important;
+  box-shadow: none !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* All input fields - Simple styling */
+.paymentWidgets input,
+.paymentWidgets select,
+.wpwl-form input,
+.wpwl-form select,
+.wpwl-control,
+input.wpwl-control {
+  width: 100% !important;
+  padding: 10px 12px !important;
+  border: 1px solid #d1d5db !important;
+  border-radius: 4px !important;
+  font-size: 14px !important;
+  font-family: 'Inter', sans-serif !important;
+  background: white !important;
+  color: #333 !important;
+  margin: 0 0 12px 0 !important;
+  box-sizing: border-box !important;
+  display: block !important;
+}
+
+/* Focus state - Simple */
+.paymentWidgets input:focus,
+.paymentWidgets select:focus,
+.wpwl-form input:focus,
+.wpwl-form select:focus,
+.wpwl-control:focus {
+  border-color: #6366f1 !important;
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgba(99,102,241,0.1) !important;
+}
+
+/* Labels - Simple */
+.paymentWidgets label,
+.wpwl-form label,
+.wpwl-label {
+  font-size: 13px !important;
+  color: #374151 !important;
+  font-weight: 500 !important;
+  margin-bottom: 4px !important;
+  display: block !important;
+  font-family: 'Inter', sans-serif !important;
+}
+
+/* Submit button - Simple */
+.paymentWidgets button,
+.paymentWidgets input[type="submit"],
+.wpwl-form button,
+.wpwl-form input[type="submit"],
+.wpwl-submit,
+button.wpwl-submit,
+input.wpwl-submit {
+  width: 100% !important;
+  padding: 12px 20px !important;
+  background: #6366f1 !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 4px !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  margin-top: 10px !important;
+  font-family: 'Inter', sans-serif !important;
+}
+
+/* Button hover */
+.paymentWidgets button:hover,
+.paymentWidgets input[type="submit"]:hover,
+.wpwl-form button:hover,
+.wpwl-form input[type="submit"]:hover,
+.wpwl-submit:hover {
+  background: #4f46e5 !important;
+}
+
+/* Reset all positioning to prevent overlap */
+.paymentWidgets *,
+.wpwl-form *,
+.wpwl-wrapper * {
+  position: static !important;
+  float: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* Form groups spacing */
+.wpwl-group {
+  margin-bottom: 15px !important;
+  clear: both !important;
+}
+
+/* Simple container styling */
+.paymentWidgets {
+  background: #ffffff !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 8px !important;
+  padding: 20px !important;
+  margin: 0 !important;
+  font-family: 'Inter', sans-serif !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
+  width: 100% !important;
+  max-width: 450px !important;
+}

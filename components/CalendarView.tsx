@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Calendar as CalendarIcon, Clock, ChevronLeft, ChevronRight, MoreVertical, ExternalLink, Sparkles, Zap, CheckCircle } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, ChevronLeft, ChevronRight, MoreVertical, ExternalLink, CheckCircle, Zap, Sparkles } from 'lucide-react';
 import { ContentItem } from '../types';
 
 interface CalendarViewProps {

@@ -19,7 +19,7 @@ class EmailService {
       const configs = await prisma.config.findMany({
         where: {
           key: {
-            in: ['EMAIL_HOST', 'EMAIL_PORT', 'EMAIL_SECURE', 'EMAIL_USER', 'EMAIL_PASS', 'EMAIL_FROM']
+            in: ['email_host', 'email_port', 'email_secure', 'email_user', 'email_pass', 'email_from']
           }
         }
       });
@@ -27,21 +27,20 @@ class EmailService {
       const configMap = {};
       configs.forEach(c => configMap[c.key] = c.value);
 
-      // Check if email credentials are configured
-      if (!configMap.EMAIL_HOST || !configMap.EMAIL_USER || !configMap.EMAIL_PASS) {
-        console.log('⚠️ Email service not configured. Run: node scripts/configureEmail.js');
-        return;
+      // Check required configuration
+      if (!configMap.email_host || !configMap.email_user || !configMap.email_pass) {
+        throw new Error('Email service not configured. Required: email_host, email_user, email_pass');
       }
 
-      this.fromEmail = configMap.EMAIL_FROM || 'noreply@brandpilot.com';
+      this.fromEmail = configMap.email_from || 'noreply@brandpilot.com';
 
       this.transporter = nodemailer.createTransport({
-        host: configMap.EMAIL_HOST,
-        port: parseInt(configMap.EMAIL_PORT || '587'),
-        secure: configMap.EMAIL_SECURE === 'true', // true for 465, false for other ports
+        host: configMap.email_host,
+        port: parseInt(configMap.email_port || '587'),
+        secure: configMap.email_secure === 'true', // true for 465, false for other ports
         auth: {
-          user: configMap.EMAIL_USER,
-          pass: configMap.EMAIL_PASS,
+          user: configMap.email_user,
+          pass: configMap.email_pass,
         },
       });
 

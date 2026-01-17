@@ -20,7 +20,7 @@ import AdminLogin from './components/AdminLogin';
 import AdminPosts from './components/AdminPosts';
 import APIConnectionTest from './components/APIConnectionTest';
 import { ActiveTab, BrandDNA as BrandDNAType, ContentItem } from './types';
-import { Sparkles, Bell, Search, X, CheckCircle, Zap } from 'lucide-react';
+import { Search, Bell, CheckCircle, X, Sparkles, Zap } from 'lucide-react';
 import { publishToPlatform, createPost, getUserPosts } from './services/gemini.client';
 
 const App: React.FC = () => {

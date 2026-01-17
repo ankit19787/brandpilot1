@@ -141,7 +141,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onAction, ha
         <button 
           onClick={handleLogout}
           className="w-full mt-2 flex items-center gap-3 px-4 py-3 rounded-xl text-rose-400 hover:bg-slate-800 hover:text-rose-300 transition-all font-medium"
-        >{currentPlan as any}
+        >
           <LogOut size={20} />
           Logout
         </button>

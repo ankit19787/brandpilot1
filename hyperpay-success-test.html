@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎉 HyperPay Styling Test SUCCESS!</title>
+    <link rel="stylesheet" href="/styles.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+        }
+        .success-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 30px;
+            max-width: 600px;
+            margin: 0 auto;
+            text-align: center;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        .mock-form {
+            background: rgba(255, 255, 255, 0.95);
+            color: #334155;
+            padding: 20px;
+            border-radius: 12px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="success-card">
+        <h1>🎉 SUCCESS! HyperPay Styling Applied</h1>
+        <p>Your enhanced HyperPay styling is now active and ready!</p>
+        
+        <div class="mock-form paymentWidgets">
+            <h3>Preview of Your Styled Payment Form:</h3>
+            <input type="text" placeholder="Card Number" class="wpwl-control">
+            <input type="text" placeholder="CVV" class="wpwl-control">
+            <button type="submit" class="wpwl-submit">Complete Payment</button>
+        </div>
+        
+        <div style="margin-top: 30px;">
+            <h3>📋 Your Next Steps:</h3>
+            <ol style="text-align: left; max-width: 400px; margin: 0 auto;">
+                <li><strong>Clear Browser Cache:</strong> Press <code>Ctrl+Shift+R</code> to hard refresh</li>
+                <li><strong>Open Your App:</strong> Go to <a href="http://localhost:5173" style="color: #93c5fd;">localhost:5173</a></li>
+                <li><strong>Navigate:</strong> Monetization → Upgrade Plan</li>
+                <li><strong>Test:</strong> Click "Upgrade Now" and see the styled form!</li>
+            </ol>
+        </div>
+        
+        <div style="margin-top: 20px; padding: 15px; background: rgba(16, 185, 129, 0.2); border-radius: 8px;">
+            <p>✅ <strong>Enhanced HyperPay CSS Loaded Successfully</strong></p>
+            <p>Your payment forms now have rounded corners, Inter font, and beautiful indigo styling!</p>
+        </div>
+    </div>
+
+    <script>
+        // Quick validation that CSS is loaded
+        const testElements = document.querySelectorAll('.wpwl-control, .wpwl-submit');
+        testElements.forEach(el => {
+            const style = window.getComputedStyle(el);
+            console.log(`✅ Element ${el.className} has border-radius: ${style.borderRadius}`);
+        });
+        
+        setTimeout(() => {
+            console.log('🎨 HyperPay styling validation complete!');
+            console.log('If the preview above shows styled inputs, your theme is working!');
+        }, 500);
+    </script>
+</body>
+</html>

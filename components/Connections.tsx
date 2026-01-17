@@ -8,10 +8,10 @@ import {
   ShieldCheck, 
   Loader2, 
   RefreshCw, 
-  Activity, 
-  Lock,
+  Activity,
+  Wifi,
   Globe,
-  Wifi
+  Lock
 } from 'lucide-react';
 import { PlatformConnection, ActiveTab } from '../types';
 

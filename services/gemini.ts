@@ -37,6 +37,8 @@ async function getPlatformConfig() {
     facebookApiUrl: await getConfigValue('facebook_api_url'),
     facebookApiVersion: await getConfigValue('facebook_api_version'),
     backendApiUrl: await getConfigValue('backend_api_url'),
+    cloudinaryApiUrl: await getConfigValue('cloudinary_api_url'),
+    cloudinaryApiVersion: await getConfigValue('cloudinary_api_version'),
   };
 }
 
@@ -232,7 +234,8 @@ export async function fetchFacebookTokenFromBackend(): Promise<string> {
 export async function refreshFacebookToken(longLivedToken: string): Promise<string> {
   const appId = await getConfigValue('facebook_app_id');
   const appSecret = await getConfigValue('facebook_app_secret');
-  const url = `https://graph.facebook.com/v20.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${longLivedToken}`;
+  const { facebookApiUrl, facebookApiVersion } = await getPlatformConfig();
+  const url = `${facebookApiUrl}/${facebookApiVersion}/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${longLivedToken}`;
   const res = await fetch(url);
   const data = await res.json();
   if (!res.ok || !data.access_token) {
@@ -269,7 +272,8 @@ export async function ensureLongLivedFacebookToken(token: string): Promise<strin
     // Exchange for long-lived token
     const appId = await getConfigValue('facebook_app_id');
     const appSecret = await getConfigValue('facebook_app_secret');
-    const url = `https://graph.facebook.com/v20.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${token}`;
+    const { facebookApiUrl, facebookApiVersion } = await getPlatformConfig();
+    const url = `${facebookApiUrl}/${facebookApiVersion}/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${token}`;
     const res = await fetch(url);
     const data = await res.json();
     if (!res.ok || !data.access_token) {
@@ -433,7 +437,7 @@ export const platformAPI = {
             throw new Error(`Instagram Publish Error [${errorDetails?.code || res2.status}]: ${errorDetails?.message || JSON.stringify(errorDetails)}`);
           }
           onStatus(`Published successfully to Instagram!`);
-          return { status: 201, id: data2.id, url: `instagram.com/p/${data2.id}` };
+          return { status: 201, id: data2.id, url: `https://instagram.com/p/${data2.id}` };
         } else {
           if (isImagePost) {
             onStatus("Step 2: Publishing image post to Facebook Page...");
@@ -448,7 +452,7 @@ export const platformAPI = {
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error?.message || "FB Photo Error");
-            return { status: 201, id: data.id, url: `facebook.com/${data.id}` };
+            return { status: 201, id: data.id, url: `https://facebook.com/${data.id}` };
           } else {
             onStatus("Publishing text post to Facebook Page...");
             const res = await fetch(`${apiUrl}/${apiVersion}/${id}/feed`, {
@@ -457,7 +461,7 @@ export const platformAPI = {
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error?.message || "FB Error");
-            return { status: 201, id: data.id, url: `facebook.com/${data.id}` };
+            return { status: 201, id: data.id, url: `https://facebook.com/${data.id}` };
           }
         }
       } catch (err: any) {

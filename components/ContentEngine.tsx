@@ -16,22 +16,16 @@ import {
   Globe,
   Twitter,
   Instagram,
+  Facebook,
   Terminal,
-  MessageCircle,
   ToggleLeft,
   ToggleRight,
-  Subtitles,
-  Facebook,
-  ExternalLink,
   ChevronRight,
-  ImageIcon,
   Edit3,
   ImagePlus,
-  Link as LinkIcon,
-  Lock
+  Link as LinkIcon
 } from 'lucide-react';
 import { generatePost, platformAPI, generateImage, createPost } from '../services/gemini.client';
-import { deductCredits, getMonthlyPostCount, canCreatePost } from '../services/creditService';
 import { canAccessPlatform, CREDIT_COSTS, getPlanLimits } from '../services/planService';
 import { BrandDNA, ContentItem } from '../types';
 import CreditsWarning from './CreditsWarning';

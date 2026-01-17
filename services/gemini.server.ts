@@ -190,7 +190,8 @@ export async function fetchFacebookTokenFromBackend(): Promise<string> {
 export async function refreshFacebookToken(longLivedToken: string): Promise<string> {
   const appId = await getConfigValue('facebook_app_id');
   const appSecret = await getConfigValue('facebook_app_secret');
-  const url = `https://graph.facebook.com/v20.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${longLivedToken}`;
+  const { facebookApiUrl, facebookApiVersion } = await getPlatformConfig();
+  const url = `${facebookApiUrl}/${facebookApiVersion}/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${longLivedToken}`;
   const res = await fetch(url);
   const data = await res.json();
   if (!res.ok || !data.access_token) {
@@ -203,7 +204,8 @@ export async function ensureLongLivedFacebookToken(token: string): Promise<strin
   if (token.length < 120) {
     const appId = await getConfigValue('facebook_app_id');
     const appSecret = await getConfigValue('facebook_app_secret');
-    const url = `https://graph.facebook.com/v20.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${token}`;
+    const { facebookApiUrl, facebookApiVersion } = await getPlatformConfig();
+    const url = `${facebookApiUrl}/${facebookApiVersion}/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${token}`;
     const res = await fetch(url);
     const data = await res.json();
     if (!res.ok || !data.access_token) {
@@ -274,7 +276,7 @@ export async function publishToPlatform(platform: string, content: string, metad
       if (!res2.ok) {
         throw new Error(data2.error?.message || "Instagram Publish Error");
       }
-      return { status: 201, id: data2.id, url: `instagram.com/p/${data2.id}` };
+      return { status: 201, id: data2.id, url: `https://instagram.com/p/${data2.id}` };
     } else {
       if (imageUrl) {
         const formData = new FormData();
@@ -287,7 +289,7 @@ export async function publishToPlatform(platform: string, content: string, metad
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error?.message || "FB Photo Error");
-        return { status: 201, id: data.id, url: `facebook.com/${data.id}` };
+        return { status: 201, id: data.id, url: `https://facebook.com/${data.id}` };
       } else {
         const res = await fetch(`${apiUrl}/${apiVersion}/${id}/feed`, {
           method: 'POST',
@@ -295,7 +297,7 @@ export async function publishToPlatform(platform: string, content: string, metad
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error?.message || "FB Error");
-        return { status: 201, id: data.id, url: `facebook.com/${data.id}` };
+        return { status: 201, id: data.id, url: `https://facebook.com/${data.id}` };
       }
     }
   }

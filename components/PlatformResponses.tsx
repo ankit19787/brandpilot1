@@ -145,7 +145,7 @@ const PlatformResponses: React.FC<PlatformResponsesProps> = ({ onAction, auth })
   });
 
   const platforms = [...new Set(responses.map(r => r.platform))];
-  const statuses = [...new Set(responses.map(r => r.status))];
+  const statuses = [...new Set(responses.map(r => r.status))] as string[];
 
   if (loading) {
     return (
