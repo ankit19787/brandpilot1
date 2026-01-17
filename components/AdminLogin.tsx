@@ -8,6 +8,7 @@ interface AuthData {
   plan: string;
   credits: number;
   maxCredits: number;
+  avatarStyle?: string;
 }
 
 const AdminLogin: React.FC<{ onLogin: (authData: AuthData) => void }> = ({ onLogin }) => {
@@ -39,7 +40,8 @@ const AdminLogin: React.FC<{ onLogin: (authData: AuthData) => void }> = ({ onLog
         username: data.username,
         plan: data.plan,
         credits: data.credits,
-        maxCredits: data.maxCredits
+        maxCredits: data.maxCredits,
+        avatarStyle: data.avatarStyle || '6366f1'
       };
       localStorage.setItem('brandpilot_auth', JSON.stringify(authData));
       

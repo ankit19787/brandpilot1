@@ -24,7 +24,8 @@ import {
   Code2,
   Copy,
   Terminal,
-  Layers
+  Layers,
+  Mail
 } from 'lucide-react';
 
 interface CredentialsProps {
@@ -102,6 +103,14 @@ const Credentials: React.FC<CredentialsProps> = ({ onAction }) => {
             color: 'text-pink-600',
             isConfigured: false,
             fields: []
+          },
+          'email': {
+            id: 'email',
+            name: 'Email Service',
+            icon: Mail,
+            color: 'text-green-600',
+            isConfigured: false,
+            fields: []
           }
         };
         
@@ -116,6 +125,8 @@ const Credentials: React.FC<CredentialsProps> = ({ onAction }) => {
             platformId = 'instagram';
           } else if (c.key.includes('x_') || c.key.includes('twitter')) {
             platformId = 'x';
+          } else if (c.key.includes('EMAIL_') || c.key.toLowerCase().includes('email')) {
+            platformId = 'email';
           } else if (c.key.includes('cloudinary')) {
             platformId = 'cloudinary';
           } else if (c.key.includes('HYPERPAY') || c.key.includes('hyperpay')) {
@@ -133,10 +144,11 @@ const Credentials: React.FC<CredentialsProps> = ({ onAction }) => {
               name: platformId === 'cloudinary' ? 'Cloudinary' : 
                     platformId === 'hyperpay' ? 'HyperPay Gateway' :
                     platformId === 'gemini' ? 'Gemini AI' :
+                    platformId === 'email' ? 'Email Service' :
                     platformId === 'other' ? 'Other Configs' :
                     platformId.charAt(0).toUpperCase() + platformId.slice(1),
-              icon: Database,
-              color: 'text-slate-500',
+              icon: platformId === 'email' ? Mail : Database,
+              color: platformId === 'email' ? 'text-green-600' : 'text-slate-500',
               isConfigured: false,
               fields: []
             };

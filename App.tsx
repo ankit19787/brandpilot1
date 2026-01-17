@@ -12,6 +12,8 @@ import Credentials from './components/Credentials';
 import Documentation from './components/Documentation';
 import PaymentHistory from './components/PaymentHistory';
 import Credits from './components/Credits';
+import Profile from './components/Profile';
+import EmailLogs from './components/EmailLogs';
 import PlatformResponses from './components/PlatformResponses';
 import AdminLogin from './components/AdminLogin';
 import AdminPosts from './components/AdminPosts';
@@ -106,7 +108,8 @@ const App: React.FC = () => {
               role: validationData.user.role,
               plan: validationData.user.plan,
               credits: validationData.user.credits,
-              maxCredits: validationData.user.maxCredits
+              maxCredits: validationData.user.maxCredits,
+              avatarStyle: validationData.user.avatarStyle || '6366f1'
             };
             
             setAuth(enrichedAuth);
@@ -515,6 +518,8 @@ const App: React.FC = () => {
       );
       case 'payment-history': return <PaymentHistory onAction={addToast} />;
       case 'credits': return <Credits onAction={addToast} />;
+      case 'profile': return <Profile auth={auth} userPlan={userPlan} onAction={addToast} onUpdate={(newAuth) => setAuth(newAuth)} />;
+      case 'email-logs': return <EmailLogs />;
       case 'platform-responses': return <PlatformResponses onAction={addToast} auth={auth} />;
       case 'documentation': return <Documentation />;
       case 'adminposts': return <AdminPosts />;
@@ -586,16 +591,17 @@ const App: React.FC = () => {
               <span className="absolute -top-1 -right-1 w-2 h-2 bg-rose-500 rounded-full border-2 border-white"></span>
             </button>
             
-            <div className="flex items-center gap-3 pl-6 border-l border-slate-200">
+            <div className="flex items-center gap-3 pl-6 border-slate-200">
               <div className="text-right">
-                <p className="text-sm font-bold text-slate-900">Alex Rivera</p>
-                <p className="text-xs text-slate-500 font-medium">Founder & Creator</p>
+                <p className="text-sm font-bold text-slate-900">{auth?.username || 'User'}</p>
+                <p className="text-xs text-slate-500 font-medium capitalize">{userPlan.plan} Plan</p>
               </div>
               <img 
-                src="https://picsum.photos/seed/alex/100/100" 
+                src={`https://ui-avatars.com/api/?name=${encodeURIComponent(auth?.username || 'User')}&background=${auth?.avatarStyle || '6366f1'}&color=fff&size=100&bold=true`}
                 alt="Profile" 
-                className="w-10 h-10 rounded-xl border border-slate-200 object-cover cursor-pointer hover:opacity-80 transition-opacity"
-                onClick={() => addToast('Profile settings coming soon...')}
+                className="w-10 h-10 rounded-xl border-2 border-slate-200 object-cover cursor-pointer hover:ring-2 hover:ring-indigo-500 transition-all"
+                onClick={() => setActiveTab('profile')}
+                title="View Profile Settings"
               />
             </div>
           </div>

@@ -14,6 +14,8 @@ model User {
   id              String        @id @default(uuid())
   username        String        @unique
   passwordHash    String
+  email           String?       // Optional email
+  avatarStyle     String        @default("default") // Avatar color scheme
   role            String        // 'admin' | 'user'
   plan            String        @default("free") // 'free' | 'pro' | 'business' | 'enterprise'
   credits         Int           @default(1000) // AI credits remaining
@@ -208,4 +210,21 @@ model MonetizationPlan {
   
   @@index([userId])
   @@index([isActive])
+}
+
+model EmailLog {
+  id          String   @id @default(uuid())
+  recipient   String   // Email address
+  subject     String   // Email subject
+  type        String   // 'post_published' | 'post_failed' | 'payment_confirmed' | etc
+  status      String   // 'sent' | 'failed'
+  messageId   String?  // Email message ID if sent successfully
+  error       String?  // Error message if failed
+  metadata    String?  // JSON metadata (post details, etc)
+  createdAt   DateTime @default(now())
+  
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+  @@index([recipient])
 }

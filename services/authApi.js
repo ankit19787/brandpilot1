@@ -29,7 +29,8 @@ router.post('/login', async (req, res) => {
     username: user.username,
     plan: user.plan,
     credits: user.credits,
-    maxCredits: user.maxCredits
+    maxCredits: user.maxCredits,
+    avatarStyle: user.avatarStyle || '6366f1'
   });
 });
 

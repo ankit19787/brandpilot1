@@ -8,6 +8,7 @@ import authApi from './services/authApi.js';
 import { PrismaClient } from '@prisma/client';
 import * as geminiServer from './services/gemini.server.js';
 import HyperPayService from './services/hyperPayService.js';
+import emailService from './services/emailService.js';
 
 // Load environment variables from .env.local or .env (whichever exists)
 import fs from 'fs';
@@ -229,7 +230,8 @@ app.post('/api/validate-token', async (req, res) => {
         role: session.user.role,
         plan: session.user.plan,
         credits: session.user.credits,
-        maxCredits: session.user.maxCredits
+        maxCredits: session.user.maxCredits,
+        avatarStyle: session.user.avatarStyle || '6366f1'
       }
     });
   } catch (error) {
@@ -364,6 +366,12 @@ app.post('/api/brand-dna', async (req, res) => {
         });
         
         console.log(`Saved Brand DNA for user ${userId}`);
+        
+        // Send email notification
+        if (user.email) {
+          await emailService.sendBrandDNAGeneratedEmail(user.email, user.username);
+        }
+        
         return res.json({ ...result, credits: balanceAfter });
       } catch (analysisError) {
         console.error('Brand DNA analysis failed, refunding credits:', analysisError);
@@ -1058,10 +1066,51 @@ app.patch('/api/posts/:postId', async (req, res) => {
     
     const updatedPost = await prisma.post.update({
       where: { id: postId },
-      data: updateData
+      data: updateData,
+      include: { user: true }
     });
     
     console.log(`Post ${postId} updated to status: ${status}`, { platformPostId, platformError: platformError?.substring(0, 100) });
+    
+    // Send email notification for published or failed posts
+    if (updatedPost.user.email) {
+      console.log(`📧 Attempting to send email to: ${updatedPost.user.email}`);
+      try {
+        if (status === 'published' && !platformError) {
+          // Post published successfully
+          console.log('📧 Sending post published email...');
+          const result = await emailService.sendPostPublishedEmail(
+            updatedPost.user.email,
+            updatedPost.user.username,
+            {
+              platform: updatedPost.platform,
+              content: updatedPost.content,
+              platformPostId: platformPostId
+            }
+          );
+          console.log('📧 Email result:', result);
+        } else if (status === 'failed' && platformError) {
+          // Post publishing failed
+          console.log('📧 Sending post failed email...');
+          const result = await emailService.sendPostFailedEmail(
+            updatedPost.user.email,
+            updatedPost.user.username,
+            {
+              platform: updatedPost.platform,
+              scheduledFor: updatedPost.scheduledFor
+            },
+            platformError
+          );
+          console.log('📧 Email result:', result);
+        }
+      } catch (emailError) {
+        console.error('❌ Failed to send email notification:', emailError.message);
+        // Don't fail the request if email fails
+      }
+    } else {
+      console.log('⚠️ No email address for user, skipping notification');
+    }
+    
     res.json(updatedPost);
   } catch (error) {
     console.error('Error updating post:', error);
@@ -1083,6 +1132,47 @@ app.get('/api/logs/:userId', async (req, res) => {
     const result = await geminiServer.getUserLogs(req.params.userId);
     res.json(result);
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Email logs endpoint for admin panel
+app.get('/api/email-logs', async (req, res) => {
+  try {
+    const { limit = '50', status, type } = req.query;
+    
+    const where = {};
+    if (status) where.status = status;
+    if (type) where.type = type;
+    
+    const logs = await prisma.emailLog.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: parseInt(limit)
+    });
+    
+    // Get statistics
+    const stats = await prisma.emailLog.groupBy({
+      by: ['status'],
+      _count: true
+    });
+    
+    const totalSent = stats.find(s => s.status === 'sent')?._count || 0;
+    const totalFailed = stats.find(s => s.status === 'failed')?._count || 0;
+    
+    res.json({
+      logs,
+      stats: {
+        totalSent,
+        totalFailed,
+        total: totalSent + totalFailed,
+        successRate: totalSent + totalFailed > 0 
+          ? ((totalSent / (totalSent + totalFailed)) * 100).toFixed(2)
+          : 0
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching email logs:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -1148,6 +1238,30 @@ app.post('/api/user/credits/deduct', async (req, res) => {
         details: JSON.stringify({ amount, action, remainingCredits: updatedUser.credits })
       }
     });
+    
+    // Send low credits warning if below 20%
+    const creditPercentage = (balanceAfter / user.maxCredits) * 100;
+    console.log(`💰 Credit check: ${balanceAfter}/${user.maxCredits} = ${creditPercentage.toFixed(2)}%`);
+    
+    if (creditPercentage <= 20 && creditPercentage > 0 && user.email) {
+      console.log('⚠️ Credits below 20%! Sending warning email...');
+      try {
+        await emailService.sendCreditsLowEmail(
+          user.email,
+          user.username,
+          {
+            currentCredits: balanceAfter,
+            maxCredits: user.maxCredits
+          }
+        );
+        console.log('✅ Credits low email sent successfully');
+      } catch (emailError) {
+        console.error('❌ Failed to send credits low email:', emailError.message);
+        // Don't fail the request if email fails
+      }
+    } else if (creditPercentage <= 20 && !user.email) {
+      console.log('⚠️ Credits below 20% but user has no email address');
+    }
     
     res.json({ 
       success: true, 
@@ -1585,6 +1699,38 @@ app.get('/api/payment/verify/:checkoutId', async (req, res) => {
           plan: updatedUser.plan 
         });
         
+        // Send payment confirmation email
+        if (subscription.user.email) {
+          const paymentTransaction = await prisma.paymentTransaction.findUnique({
+            where: { checkoutId: checkoutId }
+          });
+          
+          await emailService.sendPaymentConfirmedEmail(
+            subscription.user.email,
+            subscription.user.username,
+            {
+              amount: paymentTransaction.amount,
+              currency: paymentTransaction.currency,
+              plan: subscription.plan,
+              billingCycle: paymentTransaction.billingCycle,
+              credits: planCredits[subscription.plan] || 1000,
+              checkoutId: checkoutId
+            }
+          );
+          
+          // Also send plan upgraded email
+          await emailService.sendPlanUpgradedEmail(
+            subscription.user.email,
+            subscription.user.username,
+            {
+              oldPlan: subscription.user.plan,
+              newPlan: subscription.plan,
+              credits: planCredits[subscription.plan] || 1000,
+              maxCredits: planCredits[subscription.plan] || 1000
+            }
+          );
+        }
+        
         res.json({ 
           success: true, 
           message: `Successfully upgraded to ${subscription.plan.toUpperCase()} plan!`,
@@ -1596,6 +1742,15 @@ app.get('/api/payment/verify/:checkoutId', async (req, res) => {
         res.json({ success: false, error: 'Subscription not found' });
       }
     } else {
+      // Payment failed - get subscription for user details
+      const subscription = await prisma.subscription.findFirst({
+        where: { 
+          stripeCustomerId: checkoutId,
+          status: 'pending'
+        },
+        include: { user: true }
+      });
+      
       // Update subscription and transaction to failed
       await prisma.$transaction([
         prisma.subscription.updateMany({
@@ -1614,6 +1769,24 @@ app.get('/api/payment/verify/:checkoutId', async (req, res) => {
           }
         })
       ]);
+      
+      // Send payment failed email
+      if (subscription?.user?.email) {
+        const paymentTransaction = await prisma.paymentTransaction.findUnique({
+          where: { checkoutId: checkoutId }
+        });
+        
+        await emailService.sendPaymentFailedEmail(
+          subscription.user.email,
+          subscription.user.username,
+          {
+            amount: paymentTransaction.amount,
+            currency: paymentTransaction.currency,
+            plan: subscription.plan
+          },
+          paymentStatus.result.description
+        );
+      }
       
       res.json({ 
         success: false, 
@@ -1885,6 +2058,123 @@ app.get('/api/stats', async (req, res) => {
     });
   } catch (error) {
     console.error('Stats error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// User Profile endpoints
+app.get('/api/user/stats/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        avatarStyle: true,
+        createdAt: true
+      }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Get post stats
+    const posts = await prisma.post.findMany({
+      where: { userId }
+    });
+    
+    const totalPosts = posts.length;
+    const publishedPosts = posts.filter(p => p.status === 'published').length;
+    
+    // Get total credits used
+    const transactions = await prisma.creditTransaction.findMany({
+      where: { userId, amount: { lt: 0 } }
+    });
+    
+    const totalCreditsUsed = Math.abs(
+      transactions.reduce((sum, tx) => sum + tx.amount, 0)
+    );
+    
+    res.json({
+      ...user,
+      totalPosts,
+      publishedPosts,
+      totalCreditsUsed,
+      accountCreated: user.createdAt
+    });
+  } catch (error) {
+    console.error('User stats error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.patch('/api/user/profile/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { username, email, avatarStyle, currentPassword, newPassword } = req.body;
+    
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // If changing password, verify current password
+    if (newPassword) {
+      if (!currentPassword) {
+        return res.status(400).json({ error: 'Current password required' });
+      }
+      
+      // Simple password check (in production, use bcrypt)
+      if (user.passwordHash !== currentPassword) {
+        return res.status(401).json({ error: 'Current password incorrect' });
+      }
+      
+      if (newPassword.length < 6) {
+        return res.status(400).json({ error: 'Password must be at least 6 characters' });
+      }
+    }
+    
+    // Check if username is taken (if changing)
+    if (username && username !== user.username) {
+      const existingUser = await prisma.user.findUnique({
+        where: { username }
+      });
+      
+      if (existingUser) {
+        return res.status(400).json({ error: 'Username already taken' });
+      }
+    }
+    
+    // Update user
+    const updateData = {};
+    if (username) updateData.username = username;
+    if (email !== undefined) updateData.email = email;
+    if (avatarStyle) updateData.avatarStyle = avatarStyle;
+    if (newPassword) updateData.passwordHash = newPassword;
+    
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: updateData,
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        role: true,
+        plan: true,
+        credits: true,
+        maxCredits: true,
+        avatarStyle: true
+      }
+    });
+    
+    res.json(updatedUser);
+  } catch (error) {
+    console.error('Profile update error:', error);
     res.status(500).json({ error: error.message });
   }
 });

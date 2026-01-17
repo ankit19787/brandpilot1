@@ -5,6 +5,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { uploadToCloudinary } from "./cloudinaryUpload.js";
 import { PrismaClient } from '@prisma/client';
 import FormData from 'form-data';
+import emailService from './emailService.js';
 
 const prisma = new PrismaClient();
 
@@ -527,31 +528,28 @@ export const getMonetizationPlan = async (dna, metrics) => {
 };
 
 export async function createPost({ userId, platform, content, imageUrl, status, scheduledFor }) {
-  console.log('createPost called with:', { userId, platform, content, imageUrl, status, scheduledFor });
+  console.log('🔍 createPost called with userId:', userId, '| platform:', platform);
   try {
-    // If userId is not a valid UUID or is 'default_user', try to find or create a default user
-    let finalUserId = userId;
+    // Validate userId is provided and looks like a UUID
     if (!userId || userId === 'default_user') {
-      // Try to find an admin user or any user
-      const user = await prisma.user.findFirst({
-        orderBy: { createdAt: 'asc' }
-      });
-      
-      if (user) {
-        finalUserId = user.id;
-      } else {
-        // Create a default user if none exists
-        const defaultUser = await prisma.user.create({
-          data: {
-            username: 'default_user',
-            passwordHash: 'not_used',
-            role: 'admin',
-            createdAt: new Date()
-          }
-        });
-        finalUserId = defaultUser.id;
-      }
+      console.error('❌ INVALID userId provided to createPost:', userId);
+      console.error('Posts must be created with a valid authenticated user ID!');
+      throw new Error('User ID is required to create posts. Please ensure you are logged in.');
     }
+    
+    // Verify user exists in database
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, username: true, email: true }
+    });
+    
+    if (!user) {
+      console.error('❌ User not found in database:', userId);
+      throw new Error('Invalid user ID. Please login again.');
+    }
+    
+    console.log('✅ Creating post for user:', user.username, '| email:', user.email || 'NO EMAIL');
+    const finalUserId = userId;
     
     const post = await prisma.post.create({
       data: {
@@ -565,6 +563,29 @@ export async function createPost({ userId, platform, content, imageUrl, status, 
       }
     });
     console.log('Post created in database:', post);
+    
+    // Send email notification if post is published immediately (not scheduled)
+    if (status === 'published' && user.email) {
+      console.log('📧 Sending email notification for directly published post...');
+      try {
+        await emailService.sendPostPublishedEmail(
+          user.email,
+          user.username,
+          {
+            platform: platform,
+            content: content,
+            platformPostId: post.id
+          }
+        );
+        console.log('✅ Email notification sent successfully');
+      } catch (emailError) {
+        console.error('❌ Failed to send email notification:', emailError.message);
+        // Don't fail the post creation if email fails
+      }
+    } else if (status === 'published' && !user.email) {
+      console.log('⚠️ Post published but user has no email address - notification skipped');
+    }
+    
     return post;
   } catch (error) {
     console.error('Error creating post in database:', error);
