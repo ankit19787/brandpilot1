@@ -1,27 +1,40 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import Sidebar from './components/Sidebar';
-import Dashboard from './components/Dashboard';
-import BrandDNA from './components/BrandDNA';
-import ContentStrategist from './components/ContentStrategist';
-import ContentEngine from './components/ContentEngine';
-import CalendarView from './components/CalendarView';
-import PerformanceBrain from './components/PerformanceBrain';
-import Monetization from './components/Monetization';
-import Connections from './components/Connections';
-import Credentials from './components/Credentials';
-import Documentation from './components/Documentation';
-import PaymentHistory from './components/PaymentHistory';
-import Credits from './components/Credits';
-import Profile from './components/Profile';
-import EmailLogs from './components/EmailLogs';
-import ManageUsers from './components/ManageUsers';
-import PlatformResponses from './components/PlatformResponses';
-import AdminLogin from './components/AdminLogin';
-import AdminPosts from './components/AdminPosts';
-import APIConnectionTest from './components/APIConnectionTest';
 import { ActiveTab, BrandDNA as BrandDNAType, ContentItem } from './types';
 import { Search, Bell, CheckCircle, X, Sparkles, Zap } from 'lucide-react';
 import { publishToPlatform, createPost, getUserPosts } from './services/gemini.client';
+
+// Lazy load heavy components
+const Dashboard = lazy(() => import('./components/Dashboard'));
+const BrandDNA = lazy(() => import('./components/BrandDNA'));
+const ContentStrategist = lazy(() => import('./components/ContentStrategist'));
+const ContentEngine = lazy(() => import('./components/ContentEngine'));
+const CalendarView = lazy(() => import('./components/CalendarView'));
+const PerformanceBrain = lazy(() => import('./components/PerformanceBrain'));
+const Monetization = lazy(() => import('./components/Monetization'));
+const Connections = lazy(() => import('./components/Connections'));
+const Credentials = lazy(() => import('./components/Credentials'));
+const Documentation = lazy(() => import('./components/Documentation'));
+const PaymentHistory = lazy(() => import('./components/PaymentHistory'));
+const Credits = lazy(() => import('./components/Credits'));
+const Profile = lazy(() => import('./components/Profile'));
+const EmailLogs = lazy(() => import('./components/EmailLogs'));
+const ManageUsers = lazy(() => import('./components/ManageUsers'));
+const PlatformResponses = lazy(() => import('./components/PlatformResponses'));
+const AdminLogin = lazy(() => import('./components/AdminLogin'));
+const AdminPosts = lazy(() => import('./components/AdminPosts'));
+const APIConnectionTest = lazy(() => import('./components/APIConnectionTest'));
+const PlanModal = lazy(() => import('./components/PlanModal'));
+
+// Loading fallback component
+const LoadingFallback = () => (
+  <div className="flex items-center justify-center h-screen">
+    <div className="flex flex-col items-center gap-4">
+      <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+      <p className="text-slate-600 font-medium">Loading...</p>
+    </div>
+  </div>
+);
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
@@ -241,7 +254,7 @@ const App: React.FC = () => {
       }
       
       try {
-        const response = await fetch('/api/config/auto_post_enabled', { 
+        const response = await fetch('/api/user-config/auto_post_enabled', { 
           headers: getAuthHeaders() 
         });
         if (response.ok) {
@@ -463,89 +476,98 @@ const App: React.FC = () => {
   };
 
   const renderContent = () => {
-    switch (activeTab) {
-      case 'dashboard': return <Dashboard onNavigate={navigateWithTopic} hasDNA={!!dna} auth={auth} />;
-      case 'dna': return (
-        <BrandDNA 
-          dna={dna} 
-          setDna={setDna} 
-          userPlan={userPlan}
-          onUpgrade={handleOpenPlanModal}
-          onCreditsUpdate={handleCreditsUpdate}
-          userId={auth?.userId}
-        />
-      );
-      case 'strategist': return (
-        <ContentStrategist 
-          dna={dna} 
-          onNavigate={navigateWithTopic}
-          userPlan={userPlan}
-          onUpgrade={handleOpenPlanModal}
-          onCreditsUpdate={handleCreditsUpdate}
-          userId={auth?.userId}
-        />
-      );
-      case 'engine': return (
-        <ContentEngine 
-          dna={dna} 
-          initialTopic={draftTopic} 
-          onAction={addToast} 
-          onSchedulePost={handleSchedulePost}
-          autoPostEnabled={autoPost}
-          onToggleAutoPost={async (val) => {
-            setAutoPost(val);
-            // Save to database
-            try {
-              await fetch('/api/config', {
-                method: 'POST',
-                headers: getAuthHeaders(),
-                body: JSON.stringify({ key: 'auto_post_enabled', value: String(val) })
-              });
-              console.log('Auto-post setting saved:', val);
-              addToast(val ? 'Auto-post enabled - monitoring scheduled posts' : 'Auto-post disabled', 'success');
-            } catch (error) {
-              console.error('Error saving auto-post setting:', error);
-            }
-          }}
-          userPlan={userPlan}
-          onUpgrade={handleOpenPlanModal}
-          onCreditsUpdate={handleCreditsUpdate}
-          userId={auth?.userId}
-        />
-      );
-      case 'calendar': return (
-        <CalendarView 
-          scheduledPosts={scheduledPosts} 
-          onAction={addToast} 
-          autoPostMode={autoPost}
-          userId={auth?.userId || ''}
-        />
-      );
-      case 'connections': return <Connections onAction={addToast} onNavigate={(tab) => setActiveTab(tab)} />;
-      case 'credentials': return <Credentials onAction={addToast} />;
-      case 'performance': return <PerformanceBrain onNavigate={navigateWithTopic} userId={auth?.userId || ''} />;
-      case 'monetization': return (
-        <Monetization 
-          dna={dna} 
-          onAction={addToast}
-          userPlan={userPlan}
-          onUpgrade={handleOpenPlanModal}
-          onCreditsUpdate={handleCreditsUpdate}
-          userId={auth?.userId}
-        />
-      );
-      case 'payment-history': return <PaymentHistory onAction={addToast} />;
-      case 'credits': return <Credits onAction={addToast} />;
-      case 'profile': return <Profile auth={auth} userPlan={userPlan} onAction={addToast} onUpdate={(newAuth) => setAuth(newAuth)} />;
-      case 'email-logs': return <EmailLogs />;
-      case 'manage-users': return <ManageUsers />;
-      case 'platform-responses': return <PlatformResponses onAction={addToast} auth={auth} />;
-      case 'documentation': return <Documentation />;
-      case 'adminposts': return <AdminPosts />;
-      case 'api-test': return <APIConnectionTest />;
-      default: return <Dashboard onNavigate={navigateWithTopic} hasDNA={!!dna} auth={auth} />;
-    }
+    return (
+      <Suspense fallback={<LoadingFallback />}>
+        {(() => {
+          switch (activeTab) {
+            case 'dashboard': return <Dashboard onNavigate={navigateWithTopic} hasDNA={!!dna} auth={auth} userPlan={userPlan} onUpgrade={handleOpenPlanModal} />;
+            case 'dna': return (
+              <BrandDNA 
+                dna={dna} 
+                setDna={setDna} 
+                userPlan={userPlan}
+                onUpgrade={handleOpenPlanModal}
+                onCreditsUpdate={handleCreditsUpdate}
+                userId={auth?.userId}
+              />
+            );
+            case 'strategist': return (
+              <ContentStrategist 
+                dna={dna} 
+                onNavigate={navigateWithTopic}
+                userPlan={userPlan}
+                onUpgrade={handleOpenPlanModal}
+                onCreditsUpdate={handleCreditsUpdate}
+                userId={auth?.userId}
+              />
+            );
+            case 'engine': return (
+              <ContentEngine 
+                dna={dna} 
+                initialTopic={draftTopic} 
+                onAction={addToast} 
+                onSchedulePost={handleSchedulePost}
+                autoPostEnabled={autoPost}
+                onToggleAutoPost={async (val) => {
+                  setAutoPost(val);
+                  // Save to database
+                  try {
+                    await fetch('/api/config', {
+                      method: 'POST',
+                      headers: getAuthHeaders(),
+                      body: JSON.stringify({ key: 'auto_post_enabled', value: String(val) })
+                    });
+                    console.log('Auto-post setting saved:', val);
+                    addToast(val ? 'Auto-post enabled - monitoring scheduled posts' : 'Auto-post disabled', 'success');
+                  } catch (error) {
+                    console.error('Error saving auto-post setting:', error);
+                  }
+                }}
+                userPlan={userPlan}
+                onUpgrade={handleOpenPlanModal}
+                onCreditsUpdate={handleCreditsUpdate}
+                userId={auth?.userId}
+              />
+            );
+            case 'calendar': return (
+              <CalendarView 
+                scheduledPosts={scheduledPosts} 
+                onAction={addToast} 
+                autoPostMode={autoPost}
+                userId={auth?.userId || ''}
+                userPlan={userPlan}
+                onUpgrade={handleOpenPlanModal}
+              />
+            );
+            case 'connections': return <Connections onAction={addToast} onNavigate={(tab) => setActiveTab(tab)} />;
+            case 'credentials': return <Credentials onAction={addToast} />;
+            case 'performance': return <PerformanceBrain onNavigate={navigateWithTopic} userId={auth?.userId || ''} />;
+            case 'monetization': return (
+              <Monetization 
+                dna={dna} 
+                onAction={addToast}
+                userPlan={userPlan}
+                onUpgrade={handleOpenPlanModal}
+                onCreditsUpdate={handleCreditsUpdate}
+                userId={auth?.userId}
+              />
+            );
+            case 'payment-history': return <PaymentHistory onAction={addToast} />;
+            case 'credits': return <Credits onAction={addToast} />;
+            case 'profile': return <Profile auth={auth} userPlan={userPlan} onAction={addToast} onUpdate={(newAuth) => setAuth(newAuth)} />;
+            case 'email-logs': return <EmailLogs />;
+            case 'manage-users': return <ManageUsers />;
+            case 'platform-responses': return <PlatformResponses onAction={addToast} auth={auth} />;
+            case 'documentation': return <Documentation />;
+            case 'adminposts': return <AdminPosts />;
+            case 'api-test': return <APIConnectionTest />;
+            default: return <Dashboard onNavigate={navigateWithTopic} hasDNA={!!dna} auth={auth} userPlan={userPlan} onUpgrade={handleOpenPlanModal} />;
+          }
+        })()}
+      </Suspense>
+    );
   };
+  
 // Show loading while checking auth
   if (isCheckingAuth) {
     return (
@@ -672,6 +694,19 @@ const App: React.FC = () => {
           </div>
         </div>
       </div>
+      
+      {/* Plan Modal */}
+      {isPlanModalOpen && (
+        <Suspense fallback={<LoadingFallback />}>
+          <PlanModal
+            isOpen={isPlanModalOpen}
+            onClose={() => setIsPlanModalOpen(false)}
+            onAction={addToast}
+            currentPlan={userPlan.plan as any}
+            onPlanUpgrade={handlePlanUpgrade}
+          />
+        </Suspense>
+      )}
     </div>
   );
 };

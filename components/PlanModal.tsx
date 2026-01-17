@@ -246,9 +246,9 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onAction, curren
       bgColor: 'bg-slate-50',
       borderColor: 'border-slate-200',
       description: 'Perfect for testing and personal projects',
-      credits: 1000,
+      credits: 300,
       features: [
-        '1,000 AI credits/month',
+        '300 AI credits/month',
         'Up to 10 posts/month',
         '2 social platforms',
         'Basic AI content generation',
@@ -258,7 +258,7 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onAction, curren
       limits: {
         posts: '10 posts/month',
         platforms: '2 platforms (Instagram, Facebook)',
-        aiGeneration: '1,000 credits',
+        aiGeneration: '300 credits',
         analytics: 'Basic analytics',
         scheduling: 'Manual posting only'
       }
@@ -274,10 +274,10 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onAction, curren
       borderColor: 'border-indigo-500',
       popular: true,
       description: 'For serious creators and influencers',
-      credits: 10000,
+      credits: 1000,
       features: [
-        '10,000 AI credits/month',
-        'Unlimited posts',
+        '1,000 AI credits/month',
+        'Up to 33 posts/month',
         '5 social platforms',
         'Brand DNA analysis',
         'Content Strategist',
@@ -288,9 +288,9 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onAction, curren
         'Priority support'
       ],
       limits: {
-        posts: 'Unlimited',
+        posts: '~33 posts/month',
         platforms: '3 platforms (Instagram, Facebook, X)',
-        aiGeneration: '10,000 credits',
+        aiGeneration: '1,000 credits',
         analytics: 'Advanced analytics',
         scheduling: 'Auto-posting enabled'
       }
@@ -305,10 +305,10 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onAction, curren
       bgColor: 'bg-amber-50',
       borderColor: 'border-amber-500',
       description: 'For agencies and growing teams',
-      credits: 50000,
+      credits: 10000,
       features: [
-        '50,000 AI credits/month',
-        'Unlimited posts',
+        '10,000 AI credits/month',
+        'Up to 333 posts/month',
         '6 social platforms',
         'Brand DNA analysis',
         'Content Strategist',
@@ -321,9 +321,9 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onAction, curren
         '24/7 priority support'
       ],
       limits: {
-        posts: 'Unlimited',
+        posts: '~333 posts/month',
         platforms: '3 platforms (Instagram, Facebook, X)',
-        aiGeneration: '50,000 credits',
+        aiGeneration: '10,000 credits',
         analytics: 'Advanced analytics + exports',
         scheduling: 'Advanced scheduling & automation'
       }

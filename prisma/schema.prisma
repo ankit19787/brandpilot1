@@ -14,7 +14,7 @@ model User {
   id              String        @id @default(uuid())
   username        String        @unique
   passwordHash    String
-  email           String?       // Optional email
+  email           String?       @unique // Optional email, but unique if provided
   avatarStyle     String        @default("default") // Avatar color scheme
   role            String        // 'admin' | 'user'
   plan            String        @default("free") // 'free' | 'pro' | 'business' | 'enterprise'
@@ -31,6 +31,10 @@ model User {
   brandDNA        BrandDNA[]
   contentStrategies ContentStrategy[]
   monetizationPlans MonetizationPlan[]
+  
+  @@index([email])
+  @@index([plan])
+  @@index([createdAt])
 }
 
 model Session {
@@ -80,6 +84,10 @@ model Post {
   @@index([status])
   @@index([category])
   @@index([platformPostId])
+  @@index([platform])
+  @@index([scheduledFor])
+  @@index([userId, status, scheduledFor])
+  @@index([userId, platform])
 }
 
 model CreditTransaction {
