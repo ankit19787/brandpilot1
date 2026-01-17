@@ -14,9 +14,7 @@ import {
   X as CloseIcon, 
   Check, 
   Globe,
-  // Linkedin, (removed)
   Twitter,
-  // Youtube, (removed)
   Instagram,
   Terminal,
   MessageCircle,
@@ -29,11 +27,14 @@ import {
   ImageIcon,
   Edit3,
   ImagePlus,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Lock
 } from 'lucide-react';
-// Removed non-existent generateYouTubeTranscript export
 import { generatePost, platformAPI, generateImage, createPost } from '../services/gemini.client';
+import { deductCredits, getMonthlyPostCount, canCreatePost } from '../services/creditService';
+import { canAccessPlatform, CREDIT_COSTS, getPlanLimits } from '../services/planService';
 import { BrandDNA, ContentItem } from '../types';
+import CreditsWarning from './CreditsWarning';
 
 interface ContentEngineProps {
   dna: BrandDNA | null;
@@ -42,6 +43,10 @@ interface ContentEngineProps {
   onSchedulePost: (post: ContentItem) => void;
   autoPostEnabled: boolean;
   onToggleAutoPost: (val: boolean) => void;
+  userPlan?: { plan: string; credits: number; maxCredits: number };
+  onUpgrade: () => void;
+  onCreditsUpdate: (newCredits: number) => void;
+  userId?: string;
 }
 
 const ContentEngine: React.FC<ContentEngineProps> = ({ 
@@ -50,14 +55,27 @@ const ContentEngine: React.FC<ContentEngineProps> = ({
   onAction, 
   onSchedulePost,
   autoPostEnabled,
-  onToggleAutoPost
+  onToggleAutoPost,
+  userPlan = { plan: 'pro', credits: 0, maxCredits: 10000 },
+  onUpgrade,
+  onCreditsUpdate,
+  userId = 'default_user'
 }) => {
   // Multi-select platform state
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(['Instagram']);
   // For backward compatibility, keep single platform for now
   const [platform, setPlatform] = useState('Instagram');
-  // const [whatsappType, setWhatsappType] = useState<'Broadcast' | 'Status'>('Broadcast'); // removed
   const [topic, setTopic] = useState(initialTopic);
+  const [content, setContent] = useState('');
+  const [imageUrl, setImageUrl] = useState<string>('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [scheduledDate, setScheduledDate] = useState('');
+  const [scheduledTime, setScheduledTime] = useState('');
+  
+  const planLimits = getPlanLimits(userPlan.plan);
   const [ytTitle, setYtTitle] = useState('');
   const [generatedContent, setGeneratedContent] = useState('');
   
@@ -110,16 +128,32 @@ const ContentEngine: React.FC<ContentEngineProps> = ({
     try {
       // Use first selected platform for content generation
       const mainPlatform = selectedPlatforms[0] || platform;
-      const textResult = await generatePost(mainPlatform, topic, activeDna);
-      setGeneratedContent(textResult);
+      // Only deduct credits when using AI (not in manual mode)
+      const textResult = await generatePost(mainPlatform, topic, activeDna, !isManualMode ? userId : undefined);
+      
+      // Update credits if returned from API
+      if (typeof textResult === 'object' && textResult.credits !== undefined) {
+        onCreditsUpdate(textResult.credits);
+        setGeneratedContent(textResult.content || textResult);
+      } else {
+        setGeneratedContent(textResult);
+      }
       setLoading(false); // Text is ready, UI is interactive
 
       // 2. Visual Synthesis (Priority 2 - Background) - Only if no manual URL provided and no image already generated
-      if (visualPlatforms.includes(mainPlatform) && !manualImageUrl && !generatedImageUrl) {
+      if (visualPlatforms.includes(mainPlatform) && !manualImageUrl && !generatedImageUrl && !isManualMode) {
         setGeneratingVisuals(true);
         try {
-          const imageResult = await generateImage(topic, activeDna);
-          setGeneratedImageUrl(imageResult);
+          // Only deduct credits when using AI to generate image
+          const imageResult = await generateImage(topic, activeDna, userId);
+          
+          // Update credits if returned from API
+          if (typeof imageResult === 'object' && imageResult.credits !== undefined) {
+            onCreditsUpdate(imageResult.credits);
+            setGeneratedImageUrl(imageResult.imageUrl || imageResult);
+          } else {
+            setGeneratedImageUrl(imageResult);
+          }
         } catch (imgErr) {
           console.error("Visual gen failed:", imgErr);
         } finally {
@@ -181,6 +215,7 @@ const ContentEngine: React.FC<ContentEngineProps> = ({
       setApiLogs([]);
       try {
         const targetImage = getTargetImage();
+        // Always deduct credits for publishing, regardless of how content was created
         const response = await platformAPI.publish(
           plt, 
           generatedContent, 
@@ -188,13 +223,18 @@ const ContentEngine: React.FC<ContentEngineProps> = ({
             setPublishStatus(status);
             setApiLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${status}`]);
           }, 
-          { imageUrl: targetImage || undefined }
+          { imageUrl: targetImage || undefined, userId }
         );
+        
+        // Update credits if returned from API
+        if (response && response.credits !== undefined) {
+          onCreditsUpdate(response.credits);
+        }
         
         // Save post to database
         try {
           await createPost({
-            userId: 'default_user', // You can replace with actual user ID if you have authentication
+            userId: userId,
             platform: plt,
             content: generatedContent,
             imageUrl: targetImage || undefined,
@@ -245,13 +285,18 @@ const ContentEngine: React.FC<ContentEngineProps> = ({
             setPublishStatus(status);
             setApiLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${status}`]);
           },
-          { imageUrl: targetImage || undefined }
+          { imageUrl: targetImage || undefined, userId }
         );
+        
+        // Update credits if returned from API
+        if (response && response.credits !== undefined) {
+          onCreditsUpdate(response.credits);
+        }
 
         // Save post to database
         try {
           await createPost({
-            userId: 'default_user',
+            userId: userId,
             platform: plt.name,
             content: generatedContent,
             imageUrl: targetImage || undefined,
@@ -319,13 +364,14 @@ const ContentEngine: React.FC<ContentEngineProps> = ({
   };
 
   const platformsList = [
-    // { name: 'LinkedIn', icon: Linkedin, color: 'text-blue-600' },
-    { name: 'X (Twitter)', icon: Twitter, color: 'text-sky-500' },
-    // { name: 'YouTube Script', icon: Youtube, color: 'text-red-600' },
     { name: 'Instagram', icon: Instagram, color: 'text-pink-600' },
-    // { name: 'WhatsApp', icon: MessageCircle, color: 'text-emerald-600' },
     { name: 'Facebook', icon: Facebook, color: 'text-blue-700' },
+    { name: 'X (Twitter)', icon: Twitter, color: 'text-sky-500' },
   ];
+  
+  const availablePlatformNames = planLimits.platforms;
+  const availablePlatforms = platformsList.filter(p => availablePlatformNames.includes(p.name));
+  const lockedPlatforms: any[] = [];
 
   const currentPreviewImage = getPreviewImage();
   const showOnlyManualUrl = manualImageUrl && !manualImageUrl.startsWith('blob:');
@@ -368,8 +414,14 @@ const ContentEngine: React.FC<ContentEngineProps> = ({
           <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm space-y-8">
             <div>
               <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-4">Select Target Platforms</label>
+              <CreditsWarning
+                currentCredits={userPlan.credits}
+                requiredCredits={CREDIT_COSTS.generatePost}
+                action="generate content"
+                onUpgrade={onUpgrade}
+              />
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {platformsList.map((p) => {
+                {availablePlatforms.map((p) => {
                   const Icon = p.icon;
                   const isSelected = selectedPlatforms.includes(p.name);
                   return (
@@ -384,7 +436,7 @@ const ContentEngine: React.FC<ContentEngineProps> = ({
                             ? prev.filter((name) => name !== p.name)
                             : [...prev, p.name]
                         );
-                        setPlatform(p.name); // for backward compatibility
+                        setPlatform(p.name);
                       }}
                       className={`px-3 py-4 rounded-xl border font-bold text-xs transition-all flex items-center gap-2 relative ${
                         isSelected 

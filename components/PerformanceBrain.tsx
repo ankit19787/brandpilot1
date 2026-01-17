@@ -1,6 +1,6 @@
 
-import React from 'react';
-import { BarChart3, TrendingUp, AlertTriangle, Lightbulb, CheckCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { BarChart3, TrendingUp, AlertTriangle, Lightbulb, CheckCircle, Users, Eye, Heart, Share2 } from 'lucide-react';
 import { 
   BarChart, 
   Bar, 
@@ -15,15 +15,60 @@ import { ActiveTab } from '../types';
 
 interface PerformanceBrainProps {
   onNavigate: (tab: ActiveTab, topic: string) => void;
+  userId: string;
 }
 
-const PerformanceBrain: React.FC<PerformanceBrainProps> = ({ onNavigate }) => {
-  const data = [
-    { name: 'Storytelling', engagement: 450, color: '#6366f1' },
-    { name: 'How-to Guides', engagement: 210, color: '#6366f1' },
-    { name: 'Controversial', engagement: 380, color: '#6366f1' },
-    { name: 'Personal', engagement: 520, color: '#f59e0b' },
-    { name: 'Productivity', engagement: 120, color: '#ef4444' },
+interface AnalyticsData {
+  categoryStats: Array<{ name: string; engagement: number; color: string; posts: number }>;
+  totalStats: { views: number; likes: number; shares: number; comments: number; posts: number };
+  platformStats: Array<{ platform: string; engagement: number; posts: number }>;
+  topPost: { content: string; engagement: number; platform: string } | null;
+  insights: { worked: string; failed: string; recommendation: string };
+}
+
+const PerformanceBrain: React.FC<PerformanceBrainProps> = ({ onNavigate, userId }) => {
+  const [analytics, setAnalytics] = useState<AnalyticsData>({
+    categoryStats: [],
+    totalStats: { views: 0, likes: 0, shares: 0, comments: 0, posts: 0 },
+    platformStats: [],
+    topPost: null,
+    insights: {
+      worked: 'Loading insights...',
+      failed: 'Analyzing performance patterns...',
+      recommendation: 'Generating recommendations...'
+    }
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      if (!userId) {
+        console.log('PerformanceBrain: No userId provided');
+        setLoading(false);
+        return;
+      }
+      
+      try {
+        console.log('Fetching analytics for userId:', userId);
+        const response = await fetch(`http://localhost:3001/api/analytics/${userId}`);
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Analytics data received:', data);
+          setAnalytics(data);
+        } else {
+          console.error('Failed to fetch analytics:', response.status, response.statusText);
+        }
+      } catch (error) {
+        console.error('Failed to fetch analytics:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAnalytics();
+  }, [userId]);
+
+  const data = analytics.categoryStats.length > 0 ? analytics.categoryStats : [
+    { name: 'No Data Yet', engagement: 0, color: '#94a3b8', posts: 0 },
   ];
 
   return (
@@ -38,9 +83,67 @@ const PerformanceBrain: React.FC<PerformanceBrainProps> = ({ onNavigate }) => {
         </div>
       </div>
 
+      {/* Real-time Stats Overview */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <Eye className="text-indigo-600" size={24} />
+            <span className="text-xs font-bold text-slate-500 uppercase">Total Views</span>
+          </div>
+          <p className="text-3xl font-black text-slate-900">{analytics.totalStats.views.toLocaleString()}</p>
+          <p className="text-xs text-slate-500 mt-1">{analytics.totalStats.posts} published posts</p>
+        </div>
+        
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <Heart className="text-rose-600" size={24} />
+            <span className="text-xs font-bold text-slate-500 uppercase">Total Likes</span>
+          </div>
+          <p className="text-3xl font-black text-slate-900">{analytics.totalStats.likes.toLocaleString()}</p>
+          <p className="text-xs text-slate-500 mt-1">
+            {analytics.totalStats.posts > 0 ? Math.round(analytics.totalStats.likes / analytics.totalStats.posts) : 0} avg per post
+          </p>
+        </div>
+        
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <Share2 className="text-emerald-600" size={24} />
+            <span className="text-xs font-bold text-slate-500 uppercase">Total Shares</span>
+          </div>
+          <p className="text-3xl font-black text-slate-900">{analytics.totalStats.shares.toLocaleString()}</p>
+          <p className="text-xs text-slate-500 mt-1">
+            {analytics.totalStats.posts > 0 ? Math.round(analytics.totalStats.shares / analytics.totalStats.posts) : 0} avg per post
+          </p>
+        </div>
+        
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <Users className="text-amber-600" size={24} />
+            <span className="text-xs font-bold text-slate-500 uppercase">Engagement</span>
+          </div>
+          <p className="text-3xl font-black text-slate-900">
+            {analytics.totalStats.posts > 0 
+              ? Math.round(((analytics.totalStats.likes + analytics.totalStats.shares + analytics.totalStats.comments) / analytics.totalStats.views) * 100) || 0
+              : 0}%
+          </p>
+          <p className="text-xs text-slate-500 mt-1">{analytics.totalStats.comments} comments</p>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
           <h2 className="text-xl font-bold mb-6">Engagement by Content Category</h2>
+          {loading ? (
+            <div className="h-[400px] flex items-center justify-center">
+              <div className="text-slate-400">Loading analytics...</div>
+            </div>
+          ) : analytics.categoryStats.length === 0 ? (
+            <div className="h-[400px] flex flex-col items-center justify-center text-center">
+              <BarChart3 className="text-slate-300 mb-4" size={64} />
+              <p className="text-slate-600 font-semibold mb-2">No Published Content Yet</p>
+              <p className="text-slate-400 text-sm">Publish some posts to see your performance analytics</p>
+            </div>
+          ) : (
           <div className="h-[400px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data} layout="vertical">
@@ -59,6 +162,7 @@ const PerformanceBrain: React.FC<PerformanceBrainProps> = ({ onNavigate }) => {
               </BarChart>
             </ResponsiveContainer>
           </div>
+          )}
         </div>
 
         <div className="space-y-6">
@@ -68,7 +172,7 @@ const PerformanceBrain: React.FC<PerformanceBrainProps> = ({ onNavigate }) => {
               <span>What Worked</span>
             </div>
             <p className="text-emerald-900 text-sm leading-relaxed font-medium">
-              Posts mentioning "Failures" or "Lessons" got 82% more shares than average. Your audience values authenticity over perfection.
+              {analytics.insights.worked}
             </p>
           </div>
 
@@ -78,7 +182,7 @@ const PerformanceBrain: React.FC<PerformanceBrainProps> = ({ onNavigate }) => {
               <span>What Failed</span>
             </div>
             <p className="text-rose-900 text-sm leading-relaxed font-medium">
-              Link-heavy posts on X are being suppressed. Try native threads with screenshots instead of outbound links.
+              {analytics.insights.failed}
             </p>
           </div>
 
@@ -88,9 +192,25 @@ const PerformanceBrain: React.FC<PerformanceBrainProps> = ({ onNavigate }) => {
               <span>The Repeatable Flywheel</span>
             </div>
             <p className="text-amber-900 text-sm leading-relaxed font-medium italic">
-              "Post on LinkedIn at 8 AM EST, wait 4 hours, then repurpose as an X thread for maximum momentum."
+              {analytics.insights.recommendation}
             </p>
           </div>
+          
+          {analytics.topPost && (
+            <div className="bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-200 p-6 rounded-3xl">
+              <div className="flex items-center gap-3 text-indigo-700 font-bold mb-3">
+                <TrendingUp size={20} />
+                <span>Top Performing Post</span>
+              </div>
+              <p className="text-indigo-900 text-xs leading-relaxed mb-3 line-clamp-3">
+                {analytics.topPost.content}
+              </p>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-indigo-600">{analytics.topPost.platform}</span>
+                <span className="text-xs font-bold text-indigo-900">{analytics.topPost.engagement}% engagement</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -102,15 +222,16 @@ const PerformanceBrain: React.FC<PerformanceBrainProps> = ({ onNavigate }) => {
               Growth Intelligence Prediction
             </h2>
             <p className="text-slate-400 max-w-xl">
-              Based on your current trajectory, you are on track to hit 50k followers by December. 
-              Accelerate this by 1.5x by introducing a "Weekly Challenge" series.
+              {analytics.totalStats.posts > 0 
+                ? `Based on ${analytics.totalStats.posts} published posts with ${Math.round(((analytics.totalStats.likes + analytics.totalStats.shares) / analytics.totalStats.posts) * 100) / 100}x avg engagement, continue your current content mix for sustained growth.`
+                : "Publish your first posts to get AI-powered growth predictions and recommendations."}
             </p>
           </div>
           <button 
-            onClick={() => onNavigate('engine', 'Announcement: I am starting a 7-day Weekly Challenge series for my community. Here is how you can participate...')}
+            onClick={() => onNavigate('engine', 'Create a high-engagement post based on my best-performing content patterns')}
             className="px-8 py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-500/20 whitespace-nowrap active:scale-95"
           >
-            Generate Challenge Series
+            {analytics.totalStats.posts > 0 ? 'Generate Similar Content' : 'Create First Post'}
           </button>
         </div>
       </div>

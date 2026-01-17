@@ -7,7 +7,7 @@ export default defineConfig(({ mode }) => {
     const backendUrl = env.VITE_BACKEND_API_URL || 'http://localhost:3001';
     return {
       server: {
-        port: 3000,
+        port: 5173,
         host: '0.0.0.0',
         proxy: {
           '/api': {

@@ -6,11 +6,11 @@ import { BrandDNA, ContentStrategy } from "../types";
 // Use relative path - Vite proxy will forward to backend
 const API_PREFIX = '/api';
 
-export const analyzeBrandDNA = async (pastPosts: string): Promise<BrandDNA> => {
+export const analyzeBrandDNA = async (pastPosts: string, userId?: string): Promise<BrandDNA> => {
   const response = await fetch(`${API_PREFIX}/brand-dna`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ pastPosts })
+    body: JSON.stringify({ pastPosts, userId })
   });
   
   if (!response.ok) {
@@ -21,11 +21,11 @@ export const analyzeBrandDNA = async (pastPosts: string): Promise<BrandDNA> => {
   return await response.json();
 };
 
-export const generateContentStrategy = async (dna: BrandDNA): Promise<ContentStrategy> => {
+export const generateContentStrategy = async (dna: BrandDNA, userId?: string): Promise<ContentStrategy> => {
   const response = await fetch(`${API_PREFIX}/content-strategy`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ dna })
+    body: JSON.stringify({ dna, userId })
   });
   
   if (!response.ok) {
@@ -36,11 +36,11 @@ export const generateContentStrategy = async (dna: BrandDNA): Promise<ContentStr
   return await response.json();
 };
 
-export const generatePost = async (platform: string, topic: string, dna: BrandDNA): Promise<string> => {
+export const generatePost = async (platform: string, topic: string, dna: BrandDNA, userId?: string): Promise<any> => {
   const response = await fetch(`${API_PREFIX}/generate-post`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ platform, topic, dna })
+    body: JSON.stringify({ platform, topic, dna, userId })
   });
   
   if (!response.ok) {
@@ -49,14 +49,15 @@ export const generatePost = async (platform: string, topic: string, dna: BrandDN
   }
   
   const data = await response.json();
-  return data.content;
+  // If userId was provided, return full object with credits, otherwise return just content for backward compatibility
+  return userId ? data : data.content;
 };
 
-export const generateImage = async (topic: string, dna: BrandDNA): Promise<string> => {
+export const generateImage = async (topic: string, dna: BrandDNA, userId?: string): Promise<any> => {
   const response = await fetch(`${API_PREFIX}/generate-image`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ topic, dna })
+    body: JSON.stringify({ topic, dna, userId })
   });
   
   if (!response.ok) {
@@ -65,10 +66,11 @@ export const generateImage = async (topic: string, dna: BrandDNA): Promise<strin
   }
   
   const data = await response.json();
-  return data.imageUrl;
+  // If userId was provided, return full object with credits, otherwise return just imageUrl for backward compatibility
+  return userId ? data : data.imageUrl;
 };
 
-export const publishToPlatform = async (platform: string, content: string, metadata?: { imageUrl?: string }) => {
+export const publishToPlatform = async (platform: string, content: string, metadata?: { imageUrl?: string; userId?: string }) => {
   const response = await fetch(`${API_PREFIX}/publish`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -83,11 +85,11 @@ export const publishToPlatform = async (platform: string, content: string, metad
   return await response.json();
 };
 
-export const getMonetizationPlan = async (dna: BrandDNA, metrics: any): Promise<any> => {
+export const getMonetizationPlan = async (dna: BrandDNA, metrics: any, userId?: string): Promise<any> => {
   const response = await fetch(`${API_PREFIX}/monetization-plan`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ dna, metrics })
+    body: JSON.stringify({ dna, metrics, userId })
   });
   
   if (!response.ok) {
@@ -100,7 +102,7 @@ export const getMonetizationPlan = async (dna: BrandDNA, metrics: any): Promise<
 
 // Platform API for publishing with status callbacks
 export const platformAPI = {
-  async publish(platform: string, content: string, onStatus: (status: string) => void, metadata?: { imageUrl?: string }) {
+  async publish(platform: string, content: string, onStatus: (status: string) => void, metadata?: { imageUrl?: string; userId?: string }) {
     onStatus(`Preparing ${platform} transmission...`);
     
     try {

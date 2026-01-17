@@ -220,123 +220,284 @@ export async function publishToPlatform(platform, content, metadata) {
   const creds = await getAllCredentials();
   const platformConfig = await getPlatformConfig();
   
-  if (platform === 'Instagram' || platform === 'Facebook') {
-    const isInstagram = platform === 'Instagram';
-    let token;
-    if (isInstagram) {
-      token = creds['instagram_token'];
-      if (!token) {
-        throw new Error("Instagram access token is not configured in database. Please set 'instagram_token' in Credentials.");
-      }
-    } else {
-      token = await fetchFacebookTokenFromBackend();
-      if (!token) {
-        throw new Error("Facebook access token is not configured in database. Please set 'facebook_token' in Credentials.");
-      }
-    }
-    const id = isInstagram ? creds['instagram_business_id'] : creds['facebook_page_id'];
-    if (!id) {
-      throw new Error(`${platform} business/page ID is not configured in database.`);
-    }
-    const apiUrl = isInstagram ? platformConfig.instagramApiUrl : platformConfig.facebookApiUrl;
-    const apiVersion = platformConfig.facebookApiVersion;
-    
-    if (!apiUrl || !apiVersion) {
-      throw new Error(`${platform} API configuration is missing in database.`);
-    }
-
-    let imageUrl = metadata?.imageUrl;
-    
-    if (imageUrl && imageUrl.startsWith('data:')) {
-      imageUrl = await uploadToCloudinary(imageUrl);
-    }
-
-    const captionLength = await getInstagramCaptionLength();
-    const caption = content.length > captionLength ? content.slice(0, captionLength) : content;
-
-    if (isInstagram) {
-      if (!imageUrl) {
-        throw new Error("Instagram posts require an image URL.");
-      }
-      
-      // Step 1: Create media container
-      const params1 = new URLSearchParams({
-        image_url: imageUrl,
-        caption: caption,
-        access_token: token
-      });
-      
-      const res1 = await fetch(`${apiUrl}/${apiVersion}/${id}/media`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        },
-        body: params1.toString()
-      });
-      const data1 = await res1.json();
-      if (!res1.ok || !data1.id) {
-        throw new Error(data1.error?.message || "Instagram Media Container Error");
-      }
-      
-      // Step 2: Publish the media
-      const params2 = new URLSearchParams({
-        creation_id: data1.id,
-        access_token: token
-      });
-      
-      const res2 = await fetch(`${apiUrl}/${apiVersion}/${id}/media_publish`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        },
-        body: params2.toString()
-      });
-      const data2 = await res2.json();
-      if (!res2.ok) {
-        throw new Error(data2.error?.message || "Instagram Publish Error");
-      }
-      return { status: 201, id: data2.id, url: `instagram.com/p/${data2.id}` };
-    } else {
-      if (imageUrl) {
-        // Facebook photo post
-        const params = new URLSearchParams({
-          url: imageUrl,
-          caption: caption,
-          access_token: token
-        });
-        
-        const res = await fetch(`${apiUrl}/${apiVersion}/${id}/photos`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded'
-          },
-          body: params.toString()
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error?.message || "FB Photo Error");
-        return { status: 201, id: data.id, url: `facebook.com/${data.id}` };
-      } else {
-        // Facebook text post
-        const params = new URLSearchParams({
-          message: caption,
-          access_token: token
-        });
-        
-        const res = await fetch(`${apiUrl}/${apiVersion}/${id}/feed`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded'
-          },
-          body: params.toString()
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error?.message || "FB Error");
-        return { status: 201, id: data.id, url: `facebook.com/${data.id}` };
-      }
-    }
-  }
+  let publishResult = {
+    success: false,
+    platformPostId: null,
+    platformResponse: null,
+    platformError: null,
+    status: 500
+  };
   
-  return { status: 201, id: "mock_" + Date.now(), url: "#" };
+  try {
+    // Handle Twitter/X
+    if (platform === 'X (Twitter)' || platform === 'Twitter' || platform.toLowerCase().includes('twitter') || platform.toLowerCase().includes('x (')) {
+      console.log('[publishToPlatform] Handling Twitter/X post');
+      console.log('[publishToPlatform] Content:', content);
+      
+      if (!creds.x_api_key || !creds.x_api_secret || !creds.x_access_token || !creds.x_access_secret) {
+        throw new Error('Twitter credentials not configured in database');
+      }
+
+      console.log('[publishToPlatform] Credentials found:', {
+        apiKey: creds.x_api_key?.substring(0, 10) + '...',
+        accessToken: creds.x_access_token?.substring(0, 10) + '...'
+      });
+
+      const twitterApiUrl = platformConfig.twitterApiUrl || 'https://api.twitter.com';
+      const url = `${twitterApiUrl}/2/tweets`;
+      console.log('[publishToPlatform] Twitter API URL:', url);
+
+      // Generate OAuth 1.0a signature (server-side)
+      const crypto = await import('crypto');
+      const nonce = crypto.randomBytes(16).toString('hex');
+      const timestamp = Math.floor(Date.now() / 1000).toString();
+
+      const oauthParams = {
+        oauth_consumer_key: creds.x_api_key,
+        oauth_token: creds.x_access_token,
+        oauth_nonce: nonce,
+        oauth_timestamp: timestamp,
+        oauth_signature_method: 'HMAC-SHA1',
+        oauth_version: '1.0',
+      };
+
+      // Generate signature
+      const rfc3986Encode = (str) => encodeURIComponent(str).replace(/[!*'()]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+      const paramString = Object.keys(oauthParams).sort().map(k => `${rfc3986Encode(k)}=${rfc3986Encode(oauthParams[k])}`).join('&');
+      const baseString = `POST&${rfc3986Encode(url)}&${rfc3986Encode(paramString)}`;
+      const signingKey = `${rfc3986Encode(creds.x_api_secret)}&${rfc3986Encode(creds.x_access_secret)}`;
+      const signature = crypto.createHmac('sha1', signingKey).update(baseString).digest('base64');
+      oauthParams.oauth_signature = signature;
+
+      const authHeader = 'OAuth ' + Object.keys(oauthParams).sort().map(k => `${rfc3986Encode(k)}="${rfc3986Encode(oauthParams[k])}"`).join(', ');
+      console.log('[publishToPlatform] Auth header:', authHeader.substring(0, 150) + '...');
+
+      // Post to Twitter
+      console.log('[publishToPlatform] Sending request to Twitter...');
+      const twitterRes = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': authHeader,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ text: content })
+      });
+
+      console.log('[publishToPlatform] Response status:', twitterRes.status);
+      const data = await twitterRes.json();
+      console.log('[publishToPlatform] Response data:', JSON.stringify(data, null, 2));
+      
+      publishResult.platformResponse = JSON.stringify(data);
+      publishResult.status = twitterRes.status;
+      
+      if (!twitterRes.ok) {
+        const errorMessage = data.detail || data.title || data.error?.message || `Twitter API Error: ${twitterRes.status}`;
+        publishResult.platformError = errorMessage;
+        console.error('Twitter API Error:', data);
+        throw new Error(errorMessage);
+      }
+
+      console.log('[publishToPlatform] Twitter post successful:', data.data?.id);
+      publishResult.success = true;
+      publishResult.platformPostId = data.data?.id;
+      return { 
+        status: 201, 
+        id: data.data.id, 
+        url: `https://x.com/i/web/status/${data.data.id}`,
+        platformResponse: publishResult 
+      };
+    }
+    
+    if (platform === 'Instagram' || platform === 'Facebook') {
+      const isInstagram = platform === 'Instagram';
+      let token;
+      
+      try {
+        if (isInstagram) {
+          token = creds['instagram_token'];
+          if (!token) {
+            throw new Error("Instagram access token is not configured in database. Please set 'instagram_token' in Credentials.");
+          }
+        } else {
+          token = await fetchFacebookTokenFromBackend();
+          if (!token) {
+            throw new Error("Facebook access token is not configured in database. Please set 'facebook_token' in Credentials.");
+          }
+        }
+        const id = isInstagram ? creds['instagram_business_id'] : creds['facebook_page_id'];
+        if (!id) {
+          throw new Error(`${platform} business/page ID is not configured in database.`);
+        }
+        const apiUrl = isInstagram ? platformConfig.instagramApiUrl : platformConfig.facebookApiUrl;
+        const apiVersion = platformConfig.facebookApiVersion;
+        
+        if (!apiUrl || !apiVersion) {
+          throw new Error(`${platform} API configuration is missing in database.`);
+        }
+
+        let imageUrl = metadata?.imageUrl;
+        
+        if (imageUrl && imageUrl.startsWith('data:')) {
+          imageUrl = await uploadToCloudinary(imageUrl);
+        }
+
+        const captionLength = await getInstagramCaptionLength();
+        const caption = content.length > captionLength ? content.slice(0, captionLength) : content;
+
+        if (isInstagram) {
+          if (!imageUrl) {
+            publishResult.platformError = "Instagram posts require an image URL.";
+            throw new Error("Instagram posts require an image URL.");
+          }
+          
+          // Step 1: Create media container
+          const params1 = new URLSearchParams({
+            image_url: imageUrl,
+            caption: caption,
+            access_token: token
+          });
+          
+          const res1 = await fetch(`${apiUrl}/${apiVersion}/${id}/media`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: params1.toString()
+          });
+          const data1 = await res1.json();
+          publishResult.platformResponse = JSON.stringify({ step1: data1 });
+          publishResult.status = res1.status;
+          
+          if (!res1.ok || !data1.id) {
+            const errorMessage = data1.error?.message || "Instagram Media Container Error";
+            publishResult.platformError = errorMessage;
+            throw new Error(errorMessage);
+          }
+          
+          // Step 2: Publish the media
+          const params2 = new URLSearchParams({
+            creation_id: data1.id,
+            access_token: token
+          });
+          
+          const res2 = await fetch(`${apiUrl}/${apiVersion}/${id}/media_publish`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: params2.toString()
+          });
+          const data2 = await res2.json();
+          publishResult.platformResponse = JSON.stringify({ step1: data1, step2: data2 });
+          publishResult.status = res2.status;
+          
+          if (!res2.ok) {
+            const errorMessage = data2.error?.message || "Instagram Publish Error";
+            publishResult.platformError = errorMessage;
+            throw new Error(errorMessage);
+          }
+          
+          publishResult.success = true;
+          publishResult.platformPostId = data2.id;
+          return { 
+            status: 201, 
+            id: data2.id, 
+            url: `instagram.com/p/${data2.id}`,
+            platformResponse: publishResult 
+          };
+        } else {
+          // Facebook posting
+          if (imageUrl) {
+            // Facebook photo post
+            const params = new URLSearchParams({
+              url: imageUrl,
+              caption: caption,
+              access_token: token
+            });
+            
+            const res = await fetch(`${apiUrl}/${apiVersion}/${id}/photos`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+              },
+              body: params.toString()
+            });
+            const data = await res.json();
+            publishResult.platformResponse = JSON.stringify(data);
+            publishResult.status = res.status;
+            
+            if (!res.ok) {
+              const errorMessage = data.error?.message || "Facebook Photo Error";
+              publishResult.platformError = errorMessage;
+              throw new Error(errorMessage);
+            }
+            
+            publishResult.success = true;
+            publishResult.platformPostId = data.id;
+            return { 
+              status: 201, 
+              id: data.id, 
+              url: `facebook.com/${data.id}`,
+              platformResponse: publishResult 
+            };
+          } else {
+            // Facebook text post
+            const params = new URLSearchParams({
+              message: caption,
+              access_token: token
+            });
+            
+            const res = await fetch(`${apiUrl}/${apiVersion}/${id}/feed`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+              },
+              body: params.toString()
+            });
+            const data = await res.json();
+            publishResult.platformResponse = JSON.stringify(data);
+            publishResult.status = res.status;
+            
+            if (!res.ok) {
+              const errorMessage = data.error?.message || "Facebook Error";
+              publishResult.platformError = errorMessage;
+              throw new Error(errorMessage);
+            }
+            
+            publishResult.success = true;
+            publishResult.platformPostId = data.id;
+            return { 
+              status: 201, 
+              id: data.id, 
+              url: `facebook.com/${data.id}`,
+              platformResponse: publishResult 
+            };
+          }
+        }
+      } catch (error) {
+        if (!publishResult.platformError) {
+          publishResult.platformError = error.message;
+        }
+        throw error;
+      }
+    }
+    
+    // Default mock response for other platforms
+    publishResult.success = true;
+    publishResult.platformPostId = "mock_" + Date.now();
+    return { 
+      status: 201, 
+      id: "mock_" + Date.now(), 
+      url: "#",
+      platformResponse: publishResult 
+    };
+    
+  } catch (error) {
+    if (!publishResult.platformError) {
+      publishResult.platformError = error.message;
+    }
+    throw error;
+  }
 }
 
 export const getMonetizationPlan = async (dna, metrics) => {

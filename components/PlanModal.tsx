@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
-import { X, Check, Zap, Crown, Building2, Sparkles, ArrowRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Check, Zap, Crown, Building2, Sparkles, ArrowRight, CreditCard, Loader2 } from 'lucide-react';
+import { initiatePayment, verifyPayment } from '../services/hyperPayService.ts';
 
 interface PlanModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAction: (msg: string, type?: 'success' | 'info') => void;
   currentPlan?: 'free' | 'pro' | 'business' | 'enterprise';
+  onPlanUpgrade?: (newPlan: string, credits: number, maxCredits: number) => void;
 }
 
 interface Plan {
@@ -30,9 +32,195 @@ interface Plan {
   };
 }
 
-const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onAction, currentPlan = 'free' }) => {
+const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onAction, currentPlan = 'free', onPlanUpgrade }) => {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [selectedPlan, setSelectedPlan] = useState<'free' | 'pro' | 'business' | 'enterprise'>(currentPlan);
+  const [isPaymentLoading, setIsPaymentLoading] = useState(false);
+  const [checkoutId, setCheckoutId] = useState<string | null>(null);
+  const [paymentWidgetLoaded, setPaymentWidgetLoaded] = useState(false);
+  const [paymentBrands, setPaymentBrands] = useState<string>('VISA MASTER MADA');
+  const [scriptUrl, setScriptUrl] = useState<string>('');
+  const [hasCheckedPayment, setHasCheckedPayment] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false); // Prevent duplicate requests
+  
+  // Check for payment result on component mount (when page loads after redirect)
+  useEffect(() => {
+    if (hasCheckedPayment || isProcessing) return;
+    
+    const checkPaymentResult = async () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const id = urlParams.get('id');
+      const resourcePath = urlParams.get('resourcePath');
+      
+      if (id) {
+        // Clean up old processed payments (older than 24 hours)
+        const processedPayments = JSON.parse(localStorage.getItem('processed_payments') || '{}');
+        const now = Date.now();
+        const oneDayMs = 24 * 60 * 60 * 1000;
+        Object.keys(processedPayments).forEach(key => {
+          if (now - processedPayments[key].timestamp > oneDayMs) {
+            delete processedPayments[key];
+          }
+        });
+        localStorage.setItem('processed_payments', JSON.stringify(processedPayments));
+        
+        // Check if we've already processed this payment ID
+        if (processedPayments[id]) {
+          console.log('Payment already processed, skipping:', id);
+          // Clean up URL immediately
+          window.history.replaceState({}, document.title, window.location.pathname);
+          return;
+        }
+        
+        console.log('Payment callback detected:', { id, resourcePath });
+        setHasCheckedPayment(true);
+        setIsProcessing(true);
+        
+        // Mark this payment as being processed
+        processedPayments[id] = { timestamp: Date.now(), processed: true };
+        localStorage.setItem('processed_payments', JSON.stringify(processedPayments));
+        
+        try {
+          onAction('Verifying payment...', 'info');
+          
+          // Call verify endpoint
+          const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+          const verifyResponse = await fetch(`http://localhost:3001/api/payment/verify/${id}`, {
+            headers: { 'Authorization': `Bearer ${authData.token}` }
+          });
+          
+          const verifyData = await verifyResponse.json();
+          console.log('Payment verification result:', verifyData);
+          
+          if (verifyData.success) {
+            // IMMEDIATELY update parent state with new user data (before reload)
+            if (onPlanUpgrade) {
+              onPlanUpgrade(
+                verifyData.user.plan, 
+                verifyData.user.credits, 
+                verifyData.user.maxCredits
+              );
+            }
+            
+            // Update local storage with all user data
+            const updatedAuthData = {
+              ...authData,
+              plan: verifyData.user.plan,
+              credits: verifyData.user.credits,
+              maxCredits: verifyData.user.maxCredits,
+              userId: verifyData.user.id
+            };
+            localStorage.setItem('brandpilot_auth', JSON.stringify(updatedAuthData));
+            
+            // Show success message
+            onAction(verifyData.message || `Successfully upgraded to ${verifyData.user.plan.toUpperCase()} plan!`, 'success');
+            
+            // Clean up URL
+            window.history.replaceState({}, document.title, window.location.pathname);
+            
+            // Close modal immediately to show updated UI
+            onClose();
+            
+            // Reload page after delay to ensure all components refresh
+            setTimeout(() => {
+              window.location.reload();
+            }, 2000);
+          } else {
+            // Handle payment failure
+            const errorMessage = verifyData.error || verifyData.message || 'Payment failed';
+            
+            // Only show error if it's NOT a session expired/not found error
+            if (!errorMessage.includes('No payment session found') && 
+                !errorMessage.includes('session expired') &&
+                !errorMessage.includes('30min ago')) {
+              onAction(errorMessage, 'info');
+            } else {
+              console.log('Skipping expired session error message');
+            }
+            
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
+        } catch (error: any) {
+          console.error('Payment verification error:', error);
+          
+          // Don't show error for expired sessions or duplicate verification attempts
+          const errorMessage = error?.message || '';
+          if (!errorMessage.includes('No payment session found') && 
+              !errorMessage.includes('session expired') &&
+              !errorMessage.includes('30min ago')) {
+            // Only log non-session-expired errors
+            console.error('Unexpected payment verification error:', error);
+          }
+          
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } finally {
+          setIsProcessing(false);
+        }
+      }
+    };
+    
+    checkPaymentResult();
+  }, [hasCheckedPayment, isProcessing]);
+  
+  // Load HyperPay widget script when checkoutId is set and form is rendered
+  useEffect(() => {
+    if (!checkoutId || !scriptUrl) return;
+    
+    // Wait a bit for React to render the form
+    const timer = setTimeout(() => {
+      const form = document.querySelector('.paymentWidgets');
+      
+      if (!form) {
+        console.error('Payment form not found after checkout created');
+        console.log('Retrying in 500ms...');
+        
+        // Retry once more
+        setTimeout(() => {
+          const retryForm = document.querySelector('.paymentWidgets');
+          if (!retryForm) {
+            console.error('Payment form still not found after retry');
+            onAction('Error loading payment form. Please try again.', 'info');
+            return;
+          }
+          loadWidgetScript(retryForm);
+        }, 500);
+        return;
+      }
+      
+      loadWidgetScript(form);
+    }, 500);
+    
+    function loadWidgetScript(formElement: Element) {
+      console.log('Form found, loading widget script:', scriptUrl);
+      
+      // Remove any existing HyperPay scripts
+      const existingScripts = document.querySelectorAll('script[src*="paymentWidgets.js"]');
+      existingScripts.forEach(s => s.remove());
+      
+      const script = document.createElement('script');
+      script.src = `${scriptUrl}?checkoutId=${checkoutId}`;
+      script.onload = () => {
+        console.log('HyperPay widget script loaded successfully');
+        
+        setTimeout(() => {
+          const formContent = document.querySelector('.paymentWidgets')?.innerHTML;
+          console.log('Form content after init:', formContent ? 'Widget injected!' : 'Widget NOT injected');
+          setPaymentWidgetLoaded(true);
+          
+          // Scroll to payment form
+          const paymentSection = document.getElementById('hyperpay-form-container');
+          paymentSection?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 1000);
+      };
+      script.onerror = () => {
+        console.error('Failed to load HyperPay widget script');
+        onAction('Failed to load payment form. Please try again.', 'info');
+      };
+      document.body.appendChild(script);
+    }
+    
+    return () => clearTimeout(timer);
+  }, [checkoutId, scriptUrl]);
 
   const plans: Plan[] = [
     {
@@ -52,22 +240,21 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onAction, curren
         '2 social platforms',
         'Basic AI content generation',
         'Manual posting only',
-        '7-day analytics history',
         'Community support'
       ],
       limits: {
         posts: '10 posts/month',
         platforms: '2 platforms (Instagram, Facebook)',
         aiGeneration: '1,000 credits',
-        analytics: '7-day history',
+        analytics: 'Basic analytics',
         scheduling: 'Manual posting only'
       }
     },
     {
       id: 'pro',
       name: 'Pro',
-      price: billingCycle === 'monthly' ? '$29' : '$24',
-      priceMonthly: billingCycle === 'monthly' ? 29 : 24,
+      price: billingCycle === 'monthly' ? 'SR 100' : 'SR 90',
+      priceMonthly: billingCycle === 'monthly' ? 100 : 90,
       icon: Zap,
       color: 'text-indigo-600',
       bgColor: 'bg-indigo-50',
@@ -78,29 +265,28 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onAction, curren
       features: [
         '10,000 AI credits/month',
         'Unlimited posts',
-        'All social platforms (5+)',
+        '5 social platforms',
+        'Brand DNA analysis',
+        'Content Strategist',
+        'Monetization planner',
         'Advanced AI generation',
         'Auto-posting & scheduling',
-        'Brand DNA analysis',
-        'Content strategy planner',
-        '90-day analytics',
         'Performance insights',
-        'Priority support',
-        'Custom image generation'
+        'Priority support'
       ],
       limits: {
         posts: 'Unlimited',
-        platforms: 'All platforms (Instagram, Facebook, X, LinkedIn, YouTube)',
+        platforms: '3 platforms (Instagram, Facebook, X)',
         aiGeneration: '10,000 credits',
-        analytics: '90-day history',
+        analytics: 'Advanced analytics',
         scheduling: 'Auto-posting enabled'
       }
     },
     {
       id: 'business',
       name: 'Business',
-      price: billingCycle === 'monthly' ? '$79' : '$65',
-      priceMonthly: billingCycle === 'monthly' ? 79 : 65,
+      price: billingCycle === 'monthly' ? 'SR 300' : 'SR 250',
+      priceMonthly: billingCycle === 'monthly' ? 300 : 250,
       icon: Crown,
       color: 'text-amber-600',
       bgColor: 'bg-amber-50',
@@ -110,22 +296,22 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onAction, curren
       features: [
         '50,000 AI credits/month',
         'Unlimited posts',
-        'All platforms + integrations',
-        'Multi-brand management',
-        'Team collaboration (5 users)',
-        'Advanced analytics & reporting',
-        'A/B testing tools',
-        'Custom workflows',
+        '6 social platforms',
+        'Brand DNA analysis',
+        'Content Strategist',
         'Monetization planner',
         'API access',
-        'White-label options',
+        'Team features',
+        'Multi-brand management',
+        'Advanced analytics & reporting',
+        'Custom workflows',
         '24/7 priority support'
       ],
       limits: {
         posts: 'Unlimited',
-        platforms: 'All platforms + API integrations',
+        platforms: '3 platforms (Instagram, Facebook, X)',
         aiGeneration: '50,000 credits',
-        analytics: 'Unlimited history + exports',
+        analytics: 'Advanced analytics + exports',
         scheduling: 'Advanced scheduling & automation'
       }
     },
@@ -164,7 +350,7 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onAction, curren
     }
   ];
 
-  const handleUpgrade = (planId: string) => {
+  const handleUpgrade = async (planId: string) => {
     if (planId === 'enterprise') {
       onAction('Redirecting to enterprise sales...', 'info');
       onClose();
@@ -175,14 +361,81 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onAction, curren
       onAction('You are already on this plan', 'info');
       return;
     }
+    
+    if (planId === 'free') {
+      onAction('Cannot downgrade to free plan. Please contact support.', 'info');
+      return;
+    }
 
-    // Here you would integrate with Stripe, Paddle, or your payment processor
-    onAction(`Upgrading to ${planId.toUpperCase()} plan...`, 'success');
-    setTimeout(() => {
-      onAction('Payment processing... (Demo mode)', 'info');
-    }, 1000);
-    onClose();
+    try {
+      setIsPaymentLoading(true);
+      
+      const authData = localStorage.getItem('brandpilot_auth');
+      if (!authData) {
+        onAction('Please login to upgrade your plan', 'info');
+        setIsPaymentLoading(false);
+        return;
+      }
+
+      const { token } = JSON.parse(authData);
+      
+      // Get user info
+      const meResponse = await fetch('http://localhost:3001/api/me', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (!meResponse.ok) {
+        onAction('Please login again to upgrade your plan', 'info');
+        setIsPaymentLoading(false);
+        return;
+      }
+      
+      const meData = await meResponse.json();
+      console.log('User data:', meData);
+      
+      // Initiate HyperPay payment
+      onAction('Creating payment checkout...', 'info');
+      
+      const response = await fetch('http://localhost:3001/api/payment/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plan: planId,
+          billingCycle,
+          amount: plans.find(p => p.id === planId)?.priceMonthly,
+          currency: 'SAR',
+          userEmail: meData.username
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create checkout');
+      }
+      
+      console.log('Checkout created:', data);
+      setCheckoutId(data.checkoutId);
+      setScriptUrl(data.scriptUrl || 'https://eu-test.oppwa.com/v1/paymentWidgets.js');
+      if (data.brands) {
+        setPaymentBrands(data.brands.join(' '));
+      }
+      
+      setIsPaymentLoading(false); // Allow form to render
+      onAction('Loading payment form...', 'info');
+      // Script will be loaded by useEffect after form renders
+      
+    } catch (error) {
+      console.error('Payment initiation error:', error);
+      onAction('Error initiating payment. Please try again.', 'info');
+      setIsPaymentLoading(false);
+      setIsProcessing(false);
+    }
   };
+  
+  // This old useEffect was checking if checkoutId matches URL param
+  // But it won't work because checkoutId is lost on page redirect
+  // Removed in favor of the mount-time check above
 
   if (!isOpen) return null;
 
@@ -321,6 +574,72 @@ const PlanModal: React.FC<PlanModalProps> = ({ isOpen, onClose, onAction, curren
             );
           })}
         </div>
+
+        {/* Payment Widget (shown when checkout is initiated) */}
+        {checkoutId && (
+          <div className="px-8 py-8 bg-gradient-to-br from-indigo-50 to-purple-50 border-t border-b border-indigo-200">
+            <div className="max-w-2xl mx-auto">
+              <div className="text-center mb-6">
+                <CreditCard className="mx-auto mb-3 text-indigo-600" size={48} />
+                <h3 className="text-2xl font-bold text-slate-900 mb-2">Complete Your Payment</h3>
+                <p className="text-slate-600">Enter your card details to activate your {selectedPlan.toUpperCase()} plan</p>
+              </div>
+              
+              {isPaymentLoading ? (
+                <div className="text-center py-12">
+                  <Loader2 className="mx-auto animate-spin text-indigo-600 mb-3" size={40} />
+                  <p className="text-slate-600">Loading payment form...</p>
+                </div>
+              ) : (
+                <div className="bg-white rounded-2xl shadow-xl p-8">
+                  {/* HyperPay payment widget will be rendered here */}
+                  {/* The script automatically looks for forms with class "paymentWidgets" */}
+                  <div id="hyperpay-form-container" style={{ minHeight: '400px' }}>
+                    <form 
+                      id="hyperpay-payment-form"
+                      action={`${window.location.origin}${window.location.pathname}`}
+                      className="paymentWidgets" 
+                      data-brands={paymentBrands}
+                      style={{ display: 'block', width: '100%' }}
+                    >
+                      {/* HyperPay will inject the payment form fields here automatically */}
+                    </form>
+                  </div>
+                  
+                  <div className="mt-6 p-4 bg-slate-50 rounded-lg">
+                    <p className="text-xs text-slate-500 text-center">
+                      🔒 Your payment is secured with 256-bit SSL encryption. We never store your card details.
+                    </p>
+                  </div>
+                  
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setCheckoutId(null);
+                      setPaymentWidgetLoaded(false);
+                      setIsPaymentLoading(false);
+                      // Remove the script
+                      const scripts = document.querySelectorAll('script[src*="paymentWidgets.js"]');
+                      scripts.forEach(s => s.remove());
+                    }}
+                    className="mt-4 w-full py-2 text-sm text-slate-600 hover:text-slate-900 transition-colors"
+                  >
+                    Cancel Payment
+                  </button>
+                </div>
+              )}
+              
+              {!isPaymentLoading && paymentWidgetLoaded && (
+                <div className="text-center py-4 px-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-700">
+                    💡 If you don't see the payment form above, please check the browser console (F12) for any errors.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Comparison Table */}
         <div className="px-8 pb-8">

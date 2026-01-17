@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>HyperPay Minimal Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .paymentWidgets {
+            border: 2px solid #4CAF50;
+            padding: 20px;
+            min-height: 400px;
+            background: #f9f9f9;
+        }
+        h1 { color: #333; }
+        .info {
+            background: #E3F2FD;
+            padding: 15px;
+            margin: 20px 0;
+            border-left: 4px solid #2196F3;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 HyperPay Minimal Widget Test</h1>
+    
+    <div class="info">
+        <strong>What to expect:</strong>
+        <ul>
+            <li>✅ Card number input field</li>
+            <li>✅ Card holder name field</li>
+            <li>✅ Expiry date (MM/YY)</li>
+            <li>✅ CVV field</li>
+            <li>✅ Submit button</li>
+        </ul>
+    </div>
+    
+    <div id="status" style="padding: 10px; margin: 10px 0; border-radius: 5px;"></div>
+    
+    <h3>Payment Form:</h3>
+    <form action="minimal-hyperpay-test.html" class="paymentWidgets" data-brands="VISA MASTER MADA">
+        <!-- HyperPay will inject fields here -->
+    </form>
+    
+    <div class="info" style="margin-top: 20px; background: #FFF9C4; border-color: #FBC02D;">
+        <strong>Test Cards:</strong><br>
+        VISA: 4200 0000 0000 0000<br>
+        Master: 5300 0000 0000 0006<br>
+        CVV: 123 | Expiry: 12/25
+    </div>
+    
+    <script>
+        // This will be replaced with actual checkout ID
+        const checkoutId = 'REPLACE_WITH_CHECKOUT_ID';
+        
+        function showStatus(msg, type) {
+            const el = document.getElementById('status');
+            el.textContent = msg;
+            el.style.background = type === 'error' ? '#FFEBEE' : type === 'success' ? '#E8F5E9' : '#E3F2FD';
+            el.style.color = type === 'error' ? '#C62828' : type === 'success' ? '#2E7D32' : '#1565C0';
+        }
+        
+        // Generate checkout and load widget
+        async function init() {
+            try {
+                showStatus('Creating checkout...', 'info');
+                
+                const response = await fetch('http://localhost:3001/api/payment/checkout', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        plan: 'pro',
+                        billingCycle: 'monthly',
+                        amount: 10,
+                        currency: 'SAR',
+                        userEmail: 'admin'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed');
+                }
+                
+                console.log('Checkout created:', data.checkoutId);
+                
+                showStatus('Loading payment widget...', 'info');
+                
+                // Load HyperPay script
+                const script = document.createElement('script');
+                script.src = `https://test.oppwa.com/v1/paymentWidgets.js?checkoutId=${data.checkoutId}`;
+                script.onload = () => {
+                    setTimeout(() => {
+                        const form = document.querySelector('.paymentWidgets');
+                        const hasContent = form.innerHTML.trim().length > 0;
+                        
+                        if (hasContent) {
+                            showStatus('✅ Widget loaded! Enter card details above.', 'success');
+                            console.log('✅ Widget injected successfully');
+                        } else {
+                            showStatus('❌ Widget script loaded but form not populated', 'error');
+                            console.error('Form is empty. Check:');
+                            console.error('1. Checkout ID:', data.checkoutId);
+                            console.error('2. Form element:', form);
+                            console.error('3. Browser console for HyperPay errors');
+                        }
+                    }, 1500);
+                };
+                script.onerror = () => {
+                    showStatus('❌ Failed to load widget script', 'error');
+                };
+                document.body.appendChild(script);
+                
+            } catch (error) {
+                showStatus(`Error: ${error.message}`, 'error');
+                console.error(error);
+            }
+        }
+        
+        // Auto-initialize on page load
+        window.addEventListener('load', () => {
+            // Check if returning from payment
+            const urlParams = new URLSearchParams(window.location.search);
+            const checkoutId = urlParams.get('id');
+            const resourcePath = urlParams.get('resourcePath');
+            
+            if (checkoutId) {
+                showStatus('Processing payment result...', 'info');
+                console.log('Payment returned with checkout ID:', checkoutId);
+                console.log('Resource path:', resourcePath);
+                
+                // Verify payment
+                fetch(`http://localhost:3001/api/payment/verify/${checkoutId}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        console.log('Verification result:', data);
+                        if (data.success) {
+                            showStatus('✅ Payment successful!', 'success');
+                        } else {
+                            showStatus('❌ Payment verification failed', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Verification error:', error);
+                        showStatus(`Error: ${error.message}`, 'error');
+                    });
+            } else {
+                // No payment result, initialize new checkout
+                init();
+            }
+        });
+    </script>
+</body>
+</html>

@@ -2,37 +2,247 @@
 import React, { useState, useEffect } from 'react';
 import { Coins, Target, ArrowUpRight, Loader2, Sparkles, DollarSign } from 'lucide-react';
 import { getMonetizationPlan } from '../services/gemini.client';
+import { deductCredits } from '../services/creditService';
+import { canUseFeature, CREDIT_COSTS } from '../services/planService';
 import { BrandDNA, MonetizationIdea } from '../types';
+import FeatureGate from './FeatureGate';
+import CreditsWarning from './CreditsWarning';
+
+const API_PREFIX = window.location.hostname === 'localhost' ? 'http://localhost:3001/api' : '/api';
 
 interface MonetizationProps {
   dna: BrandDNA | null;
   onAction: (msg: string, type?: 'success' | 'info') => void;
+  userPlan?: { plan: string; credits: number; maxCredits: number };
+  onUpgrade: () => void;
+  onCreditsUpdate: (newCredits: number) => void;
+  userId?: string;
 }
 
-const Monetization: React.FC<MonetizationProps> = ({ dna, onAction }) => {
+const Monetization: React.FC<MonetizationProps> = ({ dna, onAction, userPlan = { plan: 'free', credits: 0, maxCredits: 1000 }, onUpgrade, onCreditsUpdate, userId }) => {
   const [plans, setPlans] = useState<MonetizationIdea[]>([]);
   const [loading, setLoading] = useState(false);
+  
+  const isLocked = !canUseFeature(userPlan.plan, 'monetization');
+  const hasEnoughCredits = userPlan.credits >= CREDIT_COSTS.monetizationPlan;
+
+  // Load saved monetization plan on mount
+  useEffect(() => {
+    console.log('🔄 Monetization useEffect - userId:', userId, 'plans.length:', plans.length);
+    if (userId && plans.length === 0) {
+      loadSavedPlan();
+    }
+  }, [userId]);
+
+  const loadSavedPlan = async () => {
+    console.log('📥 Loading saved monetization plan for userId:', userId);
+    try {
+      const response = await fetch(`${API_PREFIX}/monetization-plan/${userId}`);
+      console.log('📥 Load response status:', response.status);
+      if (response.ok) {
+        const savedPlan = await response.json();
+        console.log('✅ Loaded saved plan:', savedPlan);
+        setPlans(savedPlan);
+      }
+    } catch (error) {
+      console.log('ℹ️ No saved monetization plan found:', error.message);
+    }
+  };
 
   useEffect(() => {
-    if (dna && plans.length === 0) {
-      handleFetchPlans();
+    if (dna && plans.length === 0 && !isLocked) {
+      if (dna.isSample) {
+        console.log('⚠️ Detected sample DNA data - showing demo monetization plans');
+        // For sample data, show demo plans instead of calling API
+        const demoPlans = [
+          {
+            title: 'Sample Monetization Plan',
+            description: 'This is a demo plan. Generate real Brand DNA to get personalized monetization strategies.',
+            monetization_model: 'Demo',
+            pillar_alignment: 'Sample',
+            effort_level: 'Low'
+          }
+        ];
+        setPlans(demoPlans);
+      } else {
+        handleFetchPlans();
+      }
     }
   }, [dna]);
 
   const handleFetchPlans = async () => {
-    if (!dna) return;
+    if (!dna || isLocked) return;
+    
+    if (!hasEnoughCredits) {
+      onUpgrade();
+      return;
+    }
+    
+    console.log('🔍 Monetization Debug - userId:', userId, 'dna:', !!dna);
+    
     setLoading(true);
     try {
+      // First, check if user has existing active Monetization Plan
+      if (userId) {
+        console.log('📦 Checking for existing Monetization Plan in database...');
+        const existingResponse = await fetch(`${API_PREFIX}/monetization-plan/${userId}`);
+        if (existingResponse.ok) {
+          const existingData = await existingResponse.json();
+          if (existingData.plans && Array.isArray(existingData.plans)) {
+            console.log('✅ Found existing Monetization Plan, using cached data');
+            console.log('📊 Cached plans count:', existingData.plans.length);
+            setPlans(existingData.plans);
+            setLoading(false);
+            return;
+          } else {
+            console.log('⚠️ Existing data found but plans is not an array:', existingData);
+          }
+        }
+      }
+
       const metrics = { currentFollowers: 25000, engagement: 4.8 };
-      const result = await getMonetizationPlan(dna, metrics);
-      setPlans(result);
-    } catch (error) {
-      console.error(error);
-      onAction('Failed to fetch monetization plans.');
+      console.log('🚀 No existing plans found, generating new Monetization Plan with userId:', userId);
+      const planResult = await getMonetizationPlan(dna, metrics, userId);
+      console.log('✅ Monetization plan received:', planResult);
+      console.log('📊 Plan result type:', typeof planResult);
+      console.log('📊 Is array:', Array.isArray(planResult));
+      console.log('📊 Has plans property:', planResult && typeof planResult === 'object' && 'plans' in planResult);
+      
+      // Handle response based on whether it includes credit info
+      if (Array.isArray(planResult)) {
+        // Simple array response (no user context)
+        console.log('📊 Setting plans from array response');
+        setPlans(planResult);
+      } else if (planResult && planResult.plans && Array.isArray(planResult.plans)) {
+        // Response with credit information (has user context) - new format
+        console.log('📊 Setting plans from object response with plans array');
+        setPlans(planResult.plans);
+        if (planResult.credits !== undefined) {
+          onCreditsUpdate(planResult.credits);
+        }
+      } else {
+        // Fallback - ensure we always have an array
+        console.warn('Unexpected response format:', planResult);
+        setPlans([]);
+      }
+      
+    } catch (error: any) {
+      console.error('❌ Monetization plan error:', error);
+      onAction(`Failed to generate monetization plan: ${error.message}`);
     } finally {
       setLoading(false);
     }
   };
+
+  // Calculate dynamic metrics based on user data
+  const calculateMetrics = () => {
+    if (!dna) return { revenue: '$0', maturity: 'Unknown', efficiency: '0%' };
+    
+    // Base calculations on Brand DNA personality and audience
+    const followerCount = 25000; // This could come from connected social accounts
+    const engagement = 4.8;
+    
+    // Calculate revenue potential based on personality traits and engagement
+    const personalityStrength = (dna.personality || []).length;
+    const baseRevenue = Math.floor((followerCount * engagement * personalityStrength) / 100);
+    const revenueRange = `$${(baseRevenue * 0.8).toLocaleString()}-${(baseRevenue * 1.2).toLocaleString()}/mo`;
+    
+    // Determine audience maturity based on Brand DNA voice
+    const voice = dna.voice || '';
+    let maturity = 'Building Trust';
+    if (voice.toLowerCase().includes('authentic') || voice.toLowerCase().includes('expert')) {
+      maturity = 'High Trust';
+    } else if (voice.toLowerCase().includes('professional') || voice.toLowerCase().includes('authority')) {
+      maturity = 'Authority';
+    }
+    
+    // Calculate funnel efficiency based on content pillars
+    const pillarsCount = (dna.contentPillars || []).length;
+    const efficiency = Math.min(95, Math.max(45, 60 + (pillarsCount * 8)));
+    
+    return {
+      revenue: revenueRange,
+      maturity,
+      efficiency: `${efficiency}%`
+    };
+  };
+
+  const metrics = calculateMetrics();
+
+  // Generate dynamic "Next Best Move" recommendation
+  const generateNextBestMove = () => {
+    if (!dna || !dna.contentPillars || dna.contentPillars.length === 0) {
+      return "Build your Brand DNA first to unlock personalized monetization recommendations.";
+    }
+    
+    // Pick the most relevant content pillar (first one or random selection)
+    const topPillar = dna.contentPillars[0];
+    const pillars = dna.contentPillars;
+    
+    // Generate price point based on audience maturity
+    const pricePoint = metrics.maturity === 'High Trust' ? '$97' : 
+                      metrics.maturity === 'Authority' ? '$67' : '$39';
+    
+    // Create different recommendation templates based on content pillars
+    const recommendations = [
+      `Your audience is engaging heavily with your '${topPillar}' content. This is the perfect time to launch a ${pricePoint} mini-course or digital guide.`,
+      `Your '${topPillar}' expertise is resonating! Consider creating a ${pricePoint} masterclass or template bundle.`,
+      `High engagement on '${topPillar}' suggests your audience wants more. Launch a ${pricePoint} deep-dive course or consultation package.`,
+      `Your '${topPillar}' content is hitting! Time for a ${pricePoint} premium resource or exclusive community access.`
+    ];
+    
+    // Select recommendation based on number of pillars (for consistency)
+    const recommendationIndex = pillars.length % recommendations.length;
+    return recommendations[recommendationIndex];
+  };
+
+  const nextBestMove = generateNextBestMove();
+
+  // Add debug logging for userId state
+  useEffect(() => {
+    console.log('🔍 Monetization userId state:', {
+      userId,
+      hasUserId: !!userId,
+      dnaExists: !!dna,
+      plansCount: plans.length,
+      componentMounted: true
+    });
+  }, [userId, dna, plans.length]);
+
+  // Auto-load existing Monetization Plans for logged-in users
+  useEffect(() => {
+    const loadExistingPlans = async () => {
+      if (!userId || plans.length > 0) {
+        console.log('🔍 Monetization auto-load skipped - userId:', !!userId, 'plans exist:', plans.length > 0);
+        return;
+      }
+      
+      // Try to load plans even without dna first, in case user has existing data
+      try {
+        console.log('📦 Auto-loading existing Monetization Plans for user:', userId);
+        const existingResponse = await fetch(`${API_PREFIX}/monetization-plan/${userId}`);
+        if (existingResponse.ok) {
+          const existingData = await existingResponse.json();
+          if (existingData.plans && Array.isArray(existingData.plans)) {
+            console.log('✅ Auto-loaded existing Monetization Plans');
+            console.log('📊 Plans count:', existingData.plans.length);
+            setPlans(existingData.plans);
+          } else {
+            console.log('📭 No Monetization Plans data found in response');
+          }
+        } else {
+          console.log('📭 No existing Monetization Plans found (404)');
+        }
+      } catch (error) {
+        console.log('⚠️ Error loading existing Monetization Plans:', error);
+      }
+    };
+    
+    // Add small delay to ensure userId is properly set
+    if (userId) {
+      setTimeout(loadExistingPlans, 300);
+    }
+  }, [userId, plans.length]); // Monitor userId and plans length
 
   if (!dna) {
     return (
@@ -47,33 +257,47 @@ const Monetization: React.FC<MonetizationProps> = ({ dna, onAction }) => {
   }
 
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500">
-      <div className="flex justify-between items-start">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center">
-            <Coins size={28} />
+    <FeatureGate
+      isLocked={isLocked}
+      requiredPlan="pro"
+      featureName="Monetization Planner"
+      onUpgrade={onUpgrade}
+    >
+      <div className="p-8 max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500">
+        <div className="flex justify-between items-start">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center">
+              <Coins size={28} />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-slate-900">Monetization Planner</h1>
+              <p className="text-slate-500">Strategic funnels based on your current audience maturity.</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-3xl font-bold text-slate-900">Monetization Planner</h1>
-            <p className="text-slate-500">Strategic funnels based on your current audience maturity.</p>
-          </div>
+          <button 
+            onClick={handleFetchPlans}
+            disabled={loading || isLocked || !hasEnoughCredits}
+            className="flex items-center gap-2 text-indigo-600 font-bold hover:bg-indigo-50 px-4 py-2 rounded-xl transition-all disabled:opacity-50"
+          >
+            <Sparkles size={18} /> {plans.length > 0 ? 'Refresh Plans' : 'Generate Plans'}
+          </button>
         </div>
-        <button 
-          onClick={handleFetchPlans}
-          className="flex items-center gap-2 text-indigo-600 font-bold hover:bg-indigo-50 px-4 py-2 rounded-xl transition-all"
-        >
-          <Sparkles size={18} /> Regenerate Plan
-        </button>
-      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <CreditsWarning
+          currentCredits={userPlan.credits}
+          requiredCredits={CREDIT_COSTS.monetizationPlan}
+          action="generate monetization plans"
+          onUpgrade={onUpgrade}
+        />
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white p-6 rounded-2xl border border-slate-200 flex items-center gap-4 shadow-sm">
           <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
             <DollarSign />
           </div>
           <div>
             <p className="text-xs font-bold text-slate-500 uppercase">Est. Revenue Potential</p>
-            <p className="text-2xl font-bold text-slate-900">$12,400/mo</p>
+            <p className="text-2xl font-bold text-slate-900">{metrics.revenue}</p>
           </div>
         </div>
         <div className="bg-white p-6 rounded-2xl border border-slate-200 flex items-center gap-4 shadow-sm">
@@ -82,7 +306,7 @@ const Monetization: React.FC<MonetizationProps> = ({ dna, onAction }) => {
           </div>
           <div>
             <p className="text-xs font-bold text-slate-500 uppercase">Audience Maturity</p>
-            <p className="text-2xl font-bold text-slate-900">High Trust</p>
+            <p className="text-2xl font-bold text-slate-900">{metrics.maturity}</p>
           </div>
         </div>
         <div className="bg-white p-6 rounded-2xl border border-slate-200 flex items-center gap-4 shadow-sm">
@@ -91,7 +315,7 @@ const Monetization: React.FC<MonetizationProps> = ({ dna, onAction }) => {
           </div>
           <div>
             <p className="text-xs font-bold text-slate-500 uppercase">Funnel Efficiency</p>
-            <p className="text-2xl font-bold text-slate-900">72%</p>
+            <p className="text-2xl font-bold text-slate-900">{metrics.efficiency}</p>
           </div>
         </div>
       </div>
@@ -103,7 +327,7 @@ const Monetization: React.FC<MonetizationProps> = ({ dna, onAction }) => {
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {plans.map((plan, i) => (
+          {(Array.isArray(plans) ? plans : []).map((plan, i) => (
             <div key={i} className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col hover:shadow-lg transition-all border-t-4 border-t-indigo-500">
               <div className="flex justify-between items-start mb-6">
                 <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest ${
@@ -136,7 +360,7 @@ const Monetization: React.FC<MonetizationProps> = ({ dna, onAction }) => {
         <div className="max-w-2xl relative z-10">
           <h2 className="text-2xl font-bold mb-4">The Next Best Move</h2>
           <p className="text-indigo-200 text-lg leading-relaxed mb-6 font-medium italic">
-            "Your audience is engaging heavily with your 'Automation' tips. This is the perfect time to launch a $49 mini-course or Notion template about your workflow."
+            "{nextBestMove}"
           </p>
           <div className="flex flex-wrap gap-4">
             <button 
@@ -155,6 +379,7 @@ const Monetization: React.FC<MonetizationProps> = ({ dna, onAction }) => {
         </div>
       </div>
     </div>
+    </FeatureGate>
   );
 };
 

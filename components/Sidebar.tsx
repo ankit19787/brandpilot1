@@ -12,7 +12,10 @@ import {
   Link2,
   Key,
   Info,
-  LogOut
+  LogOut,
+  Receipt,
+  CreditCard,
+  MessageSquareText
 } from 'lucide-react';
 import { ActiveTab } from '../types';
 import PlanModal from './PlanModal';
@@ -22,23 +25,48 @@ interface SidebarProps {
   setActiveTab: (tab: ActiveTab) => void;
   onAction: (msg: string, type?: 'success' | 'info') => void;
   handleLogout: () => void;
+  userPlan?: { plan: string; credits: number; maxCredits: number };
+  onPlanUpgrade?: (newPlan: string, credits: number, maxCredits: number) => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onAction, handleLogout }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onAction, handleLogout, userPlan, onPlanUpgrade }) => {
   const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
-  const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'dna', label: 'Brand DNA', icon: Fingerprint },
-    { id: 'strategist', label: 'AI Strategist', icon: Compass },
-    { id: 'engine', label: 'Content Engine', icon: PenTool },
-    { id: 'calendar', label: 'Content Calendar', icon: Calendar },
-    { id: 'connections', label: 'Connections', icon: Link2 },
-    { id: 'credentials', label: 'API Credentials', icon: Key },
-    { id: 'performance', label: 'Performance', icon: BarChart3 },
-    { id: 'monetization', label: 'Monetization', icon: Coins },
-    { id: 'documentation', label: 'Documentation', icon: Info },
-    { id: 'adminposts', label: 'Admin Posts', icon: Settings },
+  
+  const currentPlan = userPlan?.plan || 'free';
+  const credits = userPlan?.credits || 0;
+  const maxCredits = userPlan?.maxCredits || 1000;
+  const creditsPercentage = maxCredits > 0 ? (credits / maxCredits) * 100 : 0;
+  
+  // Define all navigation items with plan requirements
+  const allNavItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, minPlan: 'free' },
+    { id: 'dna', label: 'Brand DNA', icon: Fingerprint, minPlan: 'pro' },
+    { id: 'strategist', label: 'AI Strategist', icon: Compass, minPlan: 'pro' },
+    { id: 'engine', label: 'Content Engine', icon: PenTool, minPlan: 'free' },
+    { id: 'calendar', label: 'Content Calendar', icon: Calendar, minPlan: 'free' },
+    { id: 'connections', label: 'Connections', icon: Link2, minPlan: 'free' },
+    { id: 'credentials', label: 'API Credentials', icon: Key, minPlan: 'business' },
+    { id: 'performance', label: 'Performance', icon: BarChart3, minPlan: 'free' },
+    { id: 'platform-responses', label: 'Platform Responses', icon: MessageSquareText, minPlan: 'business' },
+    { id: 'monetization', label: 'Monetization', icon: Coins, minPlan: 'pro' },
+    { id: 'payment-history', label: 'Payment History', icon: Receipt, minPlan: 'free' },
+    { id: 'credits', label: 'Credits & Usage', icon: CreditCard, minPlan: 'free' },
+    { id: 'documentation', label: 'Documentation', icon: Info, minPlan: 'free' },
+    { id: 'adminposts', label: 'Admin Posts', icon: Settings, minPlan: 'free' },
   ];
+
+  // Plan hierarchy for filtering
+  const planHierarchy: Record<string, number> = {
+    'free': 0,
+    'pro': 1,
+    'business': 2,
+    'enterprise': 3
+  };
+
+  // Filter nav items based on user's plan
+  const navItems = allNavItems.filter(item => 
+    planHierarchy[currentPlan] >= planHierarchy[item.minPlan]
+  );
 
   return (
     <div className="w-64 h-screen bg-slate-900 text-slate-300 flex flex-col fixed left-0 top-0 border-r border-slate-800 z-40">
@@ -72,11 +100,22 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onAction, ha
 
       <div className="p-4 mt-auto border-t border-slate-800">
         <div className="bg-slate-800/50 rounded-2xl p-4 border border-slate-700">
-          <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider mb-2">Pro Plan</p>
+          <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider mb-2">
+            {currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)} Plan
+          </p>
           <div className="w-full bg-slate-700 h-1.5 rounded-full overflow-hidden mb-3">
-            <div className="bg-indigo-500 h-full w-[75%] rounded-full shadow-[0_0_8px_rgba(99,102,241,0.5)]"></div>
+            <div 
+              className={`h-full rounded-full transition-all ${
+                creditsPercentage > 50 ? 'bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]' :
+                creditsPercentage > 20 ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]' :
+                'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]'
+              }`}
+              style={{ width: `${creditsPercentage}%` }}
+            ></div>
           </div>
-          <p className="text-sm text-slate-300 mb-3 font-medium">7,500 / 10,000 credits</p>
+          <p className="text-sm text-slate-300 mb-3 font-medium">
+            {credits.toLocaleString()} / {maxCredits.toLocaleString()} credits
+          </p>
           <button 
             onClick={() => setIsPlanModalOpen(true)}
             className="w-full py-2 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-lg text-sm font-bold hover:bg-indigo-500/20 transition-all"
@@ -96,7 +135,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onAction, ha
         <button 
           onClick={handleLogout}
           className="w-full mt-2 flex items-center gap-3 px-4 py-3 rounded-xl text-rose-400 hover:bg-slate-800 hover:text-rose-300 transition-all font-medium"
-        >
+        >{currentPlan as any}
           <LogOut size={20} />
           Logout
         </button>
@@ -107,7 +146,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onAction, ha
         isOpen={isPlanModalOpen} 
         onClose={() => setIsPlanModalOpen(false)}
         onAction={onAction}
-        currentPlan="pro"
+        currentPlan={userPlan?.plan as 'free' | 'pro' | 'business' | 'enterprise' || 'free'}
+        onPlanUpgrade={onPlanUpgrade}
       />
     </div>
   );

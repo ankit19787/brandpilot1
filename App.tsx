@@ -10,21 +10,45 @@ import Monetization from './components/Monetization';
 import Connections from './components/Connections';
 import Credentials from './components/Credentials';
 import Documentation from './components/Documentation';
+import PaymentHistory from './components/PaymentHistory';
+import Credits from './components/Credits';
+import PlatformResponses from './components/PlatformResponses';
 import AdminLogin from './components/AdminLogin';
 import AdminPosts from './components/AdminPosts';
-import { ActiveTab, BrandDNA as BrandDNAType, ContentItem, SAMPLE_SCHEDULED_POSTS } from './types';
+import APIConnectionTest from './components/APIConnectionTest';
+import { ActiveTab, BrandDNA as BrandDNAType, ContentItem } from './types';
 import { Sparkles, Bell, Search, X, CheckCircle, Zap } from 'lucide-react';
-import { publishToPlatform } from './services/gemini.client';
+import { publishToPlatform, createPost, getUserPosts } from './services/gemini.client';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [dna, setDna] = useState<BrandDNAType | null>(null);
   const [draftTopic, setDraftTopic] = useState<string>('');
-  const [scheduledPosts, setScheduledPosts] = useState<ContentItem[]>(SAMPLE_SCHEDULED_POSTS);
+  const [scheduledPosts, setScheduledPosts] = useState<ContentItem[]>([]);
   const [toasts, setToasts] = useState<{id: number, message: string, type: 'success' | 'info'}[]>([]);
   const [autoPost, setAutoPost] = useState<boolean>(false);
+  const [processingPosts, setProcessingPosts] = useState<Set<string>>(new Set());
+  const processingPostsRef = React.useRef<Set<string>>(new Set()); // Use ref to prevent stale closure issues
   const [auth, setAuth] = useState<{ token: string; role: string } | null>(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [userPlan, setUserPlan] = useState<{ plan: string; credits: number; maxCredits: number }>({
+    plan: 'pro',
+    credits: 7500,
+    maxCredits: 10000
+  });
+  const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
+
+  const handleCreditsUpdate = (newCredits: number) => {
+    setUserPlan(prev => ({ ...prev, credits: newCredits }));
+  };
+
+  const handlePlanUpgrade = (newPlan: string, credits: number, maxCredits: number) => {
+    setUserPlan({ plan: newPlan, credits, maxCredits });
+  };
+
+  const handleOpenPlanModal = () => {
+    setIsPlanModalOpen(true);
+  };
 
   const addToast = (message: string, type: 'success' | 'info' = 'info') => {
     if (!message) return;
@@ -34,6 +58,24 @@ const App: React.FC = () => {
       setToasts(prev => prev.filter(t => t.id !== id));
     }, 4000);
   };
+
+  // Clean up old payment URLs on app load (before any component processing)
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const paymentId = urlParams.get('id');
+    
+    if (paymentId) {
+      // Check if this payment was already processed
+      const processedPayments = JSON.parse(localStorage.getItem('processed_payments') || '{}');
+      
+      if (processedPayments[paymentId]) {
+        // Already processed, clean URL immediately
+        console.log('Cleaning up processed payment URL:', paymentId);
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+      // If not processed, let PlanModal handle it
+    }
+  }, []); // Run only once on mount
 
   // Restore session on app load
   useEffect(() => {
@@ -54,7 +96,29 @@ const App: React.FC = () => {
           });
 
           if (response.ok) {
-            setAuth(authData);
+            const validationData = await response.json();
+            
+            // Update auth with userId from validation
+            const enrichedAuth = {
+              ...authData,
+              userId: validationData.user.id,
+              username: validationData.user.username,
+              role: validationData.user.role,
+              plan: validationData.user.plan,
+              credits: validationData.user.credits,
+              maxCredits: validationData.user.maxCredits
+            };
+            
+            setAuth(enrichedAuth);
+            setUserPlan({
+              plan: validationData.user.plan,
+              credits: validationData.user.credits,
+              maxCredits: validationData.user.maxCredits
+            });
+            
+            // Update localStorage with complete data
+            localStorage.setItem('brandpilot_auth', JSON.stringify(enrichedAuth));
+            
             addToast('Session restored successfully', 'success');
           } else {
             // Token is invalid, clear it
@@ -96,7 +160,18 @@ const App: React.FC = () => {
           }
         });
 
-        if (!response.ok) {
+        if (response.ok) {
+          const validationData = await response.json();
+          
+          // Update user plan from validation if available
+          if (validationData.user) {
+            setUserPlan({
+              plan: validationData.user.plan,
+              credits: validationData.user.credits,
+              maxCredits: validationData.user.maxCredits
+            });
+          }
+        } else {
           // Token is invalid or expired
           localStorage.removeItem('brandpilot_auth');
           setAuth(null);
@@ -116,64 +191,242 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [auth]);
 
+  // Fetch user's scheduled posts on mount
+  useEffect(() => {
+    const fetchScheduledPosts = async () => {
+      if (auth?.userId) {
+        try {
+          const posts = await getUserPosts(auth.userId);
+          // Filter only scheduled posts
+          const scheduled = posts.filter((p: any) => p.status === 'scheduled').map((p: any) => ({
+            id: p.id,
+            platform: p.platform,
+            content: p.content,
+            imageUrl: p.imageUrl || undefined,
+            status: 'Scheduled',
+            scheduledFor: p.scheduledFor,
+            createdAt: p.createdAt
+          }));
+          setScheduledPosts(scheduled);
+          console.log('Loaded scheduled posts:', scheduled.length);
+        } catch (error) {
+          console.error('Error fetching scheduled posts:', error);
+        }
+      }
+    };
+    
+    fetchScheduledPosts();
+  }, [auth?.userId]);
+
+  // Load auto-post setting from database
+  useEffect(() => {
+    const loadAutoPostSetting = async () => {
+      try {
+        const response = await fetch('/api/config/auto_post_enabled');
+        if (response.ok) {
+          const data = await response.json();
+          const isEnabled = data.value === 'true';
+          setAutoPost(isEnabled);
+          console.log('Auto-post setting loaded:', isEnabled);
+        }
+      } catch (error) {
+        console.error('Error loading auto-post setting:', error);
+      }
+    };
+    
+    loadAutoPostSetting();
+  }, []);
+
   // Simulated Agentic Background Worker
   useEffect(() => {
-    if (!autoPost) return;
+    if (!autoPost) {
+      console.log('[Agent] Auto-post is disabled');
+      return;
+    }
 
+    if (!auth?.userId) {
+      console.log('[Agent] No user ID available, auto-post monitoring paused');
+      return;
+    }
+
+    console.log('[Agent] Auto-post monitoring enabled, checking every 5 seconds');
     const interval = setInterval(async () => {
       const now = new Date();
-      const duePosts = scheduledPosts.filter(post => 
-        post.status === 'Scheduled' && new Date(post.scheduledFor) <= now
-      );
+      console.log(`[Agent] Checking for due posts... Current time: ${now.toISOString()}`);
+      
+      try {
+        // Fetch fresh scheduled posts from database - ONLY get 'scheduled' status posts
+        const posts = await getUserPosts(auth.userId);
+        const scheduled = posts.filter((p: any) => p.status === 'scheduled'); // Changed: only get 'scheduled', not 'publishing'
+        
+        console.log(`[Agent] Total scheduled posts: ${scheduled.length}`);
+        
+        const duePosts = scheduled.filter((post: any) => {
+          const scheduledTime = new Date(post.scheduledFor);
+          const isDue = scheduledTime <= now;
+          const isNotProcessing = !processingPostsRef.current.has(post.id); // Use ref instead of state
+          const isScheduledStatus = post.status === 'scheduled'; // ONLY process posts with 'scheduled' status
+          if (post.status === 'scheduled') {
+            console.log(`[Agent] Post ${post.id}: scheduled for ${scheduledTime.toISOString()}, due: ${isDue}, processing: ${!isNotProcessing}, ref has: ${processingPostsRef.current.has(post.id)}`);
+          }
+          // Triple check: must be scheduled status, must be due, must not be processing
+          return isDue && isNotProcessing && isScheduledStatus;
+        });
 
-      if (duePosts.length > 0) {
-        for (const post of duePosts) {
-          try {
-            console.log(`[Agent] Auto-publishing due post: ${post.id}`);
-            
-            // Use the provided imageUrl directly - don't generate fallback
-            const imageUrl = post.imageUrl;
-            
-            if ((post.platform === 'Instagram' || post.platform === 'Facebook') && !imageUrl) {
-              console.warn(`[Agent] No image URL provided for ${post.platform} post. Instagram/Facebook require images.`);
-              addToast(`Instagram/Facebook post requires an image. Skipping post: ${post.id}`);
-              // Mark as failed but continue
-              setScheduledPosts(prev => prev.map(p => 
-                p.id === post.id ? { ...p, status: 'Failed' as const } : p
-              ));
+        if (duePosts.length > 0) {
+          console.log(`[Agent] Found ${duePosts.length} due posts, publishing...`);
+          
+          for (const post of duePosts) {
+            // Check one more time if already processing (double-check)
+            if (processingPostsRef.current.has(post.id)) {
+              console.log(`[Agent] ⚠️ Post ${post.id} already being processed, skipping...`);
               continue;
             }
             
-            console.log(`[Agent] Using image URL:`, imageUrl ? imageUrl.substring(0, 50) + '...' : 'none');
+            // IMMEDIATELY add to ref to block other checks
+            processingPostsRef.current.add(post.id);
             
-            await publishToPlatform(post.platform, post.content, { 
-              imageUrl: imageUrl || undefined
-            });
-            
-            setScheduledPosts(prev => prev.map(p => 
-              p.id === post.id ? { ...p, status: 'Published' as const } : p
-            ));
-            
-            addToast(`Agent successfully published scheduled post to ${post.platform}!`, 'success');
-          } catch (error: any) {
-            const errorMsg = error?.message || "Background Task Error";
-            console.error("Auto-post worker error:", error);
-            addToast(`Auto-post failed: ${errorMsg}`);
+            try {
+              console.log(`[Agent] Auto-publishing due post: ${post.id} to ${post.platform}`);
+              
+              // IMMEDIATELY mark post as 'publishing' in database to prevent duplicate attempts
+              await fetch(`/api/posts/${post.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                  status: 'publishing', 
+                  publishAttempts: (post.publishAttempts || 0) + 1,
+                  lastPublishAttempt: new Date().toISOString() 
+                })
+              });
+              
+              // THEN mark as processing in local state
+              setProcessingPosts(prev => new Set([...prev, post.id]));
+              
+              // Use the provided imageUrl directly - don't generate fallback
+              const imageUrl = post.imageUrl;
+              
+              // Only Instagram requires an image, Facebook allows text-only posts
+              if (post.platform === 'Instagram' && !imageUrl) {
+                console.warn(`[Agent] No image URL provided for Instagram post. Instagram requires images.`);
+                addToast(`Instagram post requires an image. Skipping post: ${post.id}`);
+                // Mark as failed in database with error details
+                await fetch(`/api/posts/${post.id}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ 
+                    status: 'failed',
+                    platformError: 'Instagram posts require an image URL',
+                    publishAttempts: (post.publishAttempts || 0) + 1,
+                    lastPublishAttempt: new Date().toISOString()
+                  })
+                });
+                setScheduledPosts(prev => prev.map(p => 
+                  p.id === post.id ? { ...p, status: 'Failed' as const } : p
+                ));
+                continue;
+              }
+              
+              console.log(`[Agent] Publishing to ${post.platform}...`);
+              
+              // Publish to platform (database status already set to 'publishing' above)
+              const result = await publishToPlatform(post.platform, post.content, { 
+                imageUrl: imageUrl || undefined,
+                userId: auth.userId
+              });
+              
+              // Update database status with platform response data
+              await fetch(`/api/posts/${post.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                  status: 'published', 
+                  publishedAt: new Date().toISOString(),
+                  platformPostId: result.platformResponse?.platformPostId || result.id,
+                  platformResponse: result.platformResponse ? JSON.stringify(result.platformResponse) : null
+                })
+              });
+              
+              
+              console.log(`[Agent] ✅ Successfully published post ${post.id}`);
+              addToast(`Agent successfully published scheduled post to ${post.platform}!`, 'success');
+              
+              // Remove from processing ref and state after successful publish
+              processingPostsRef.current.delete(post.id);
+              setProcessingPosts(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(post.id);
+                return newSet;
+              });
+            } catch (error: any) {
+              const errorMsg = error?.message || "Background Task Error";
+              console.error(`[Agent] ❌ Auto-post error for ${post.id}:`, error);
+              
+              // Update database to failed status with error details
+              await fetch(`/api/posts/${post.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                  status: 'failed',
+                  platformError: errorMsg,
+                  publishAttempts: (post.publishAttempts || 0) + 1,
+                  lastPublishAttempt: new Date().toISOString()
+                })
+              });
+              addToast(`Auto-post failed: ${errorMsg}`);
+              
+              // Remove from processing ref and state after failure
+              processingPostsRef.current.delete(post.id);
+              setProcessingPosts(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(post.id);
+                return newSet;
+              });
+            }
           }
         }
+      } catch (error) {
+        console.error('[Agent] Error checking for due posts:', error);
       }
-    }, 10000);
+    }, 5000); // Check every 5 seconds
 
     return () => clearInterval(interval);
-  }, [autoPost, scheduledPosts]);
+  }, [autoPost, auth?.userId]);
 
   const navigateWithTopic = (tab: ActiveTab, topic: string) => {
     setDraftTopic(topic);
     setActiveTab(tab);
   };
 
-  const handleSchedulePost = (post: ContentItem) => {
-    setScheduledPosts(prev => [...prev, post]);
+  const handleSchedulePost = async (post: ContentItem) => {
+    try {
+      if (!auth?.userId) {
+        console.error('No user ID available for scheduling post');
+        addToast('Please log in to schedule posts', 'info');
+        return;
+      }
+      
+      // Save to database
+      const savedPost = await createPost({
+        userId: auth.userId,
+        platform: post.platform,
+        content: post.content,
+        imageUrl: post.imageUrl,
+        status: 'scheduled',
+        scheduledFor: new Date(post.scheduledFor)
+      });
+      
+      // Update local state
+      setScheduledPosts(prev => [...prev, {
+        ...post,
+        id: savedPost.id
+      }]);
+      
+      console.log('Post scheduled successfully:', savedPost);
+    } catch (error) {
+      console.error('Error scheduling post:', error);
+      addToast('Failed to schedule post', 'info');
+    }
   };
 
   const handleLogout = async () => {
@@ -190,9 +443,27 @@ const App: React.FC = () => {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'dashboard': return <Dashboard onNavigate={navigateWithTopic} hasDNA={!!dna} />;
-      case 'dna': return <BrandDNA dna={dna} setDna={setDna} />;
-      case 'strategist': return <ContentStrategist dna={dna} onNavigate={navigateWithTopic} />;
+      case 'dashboard': return <Dashboard onNavigate={navigateWithTopic} hasDNA={!!dna} auth={auth} />;
+      case 'dna': return (
+        <BrandDNA 
+          dna={dna} 
+          setDna={setDna} 
+          userPlan={userPlan}
+          onUpgrade={handleOpenPlanModal}
+          onCreditsUpdate={handleCreditsUpdate}
+          userId={auth?.userId}
+        />
+      );
+      case 'strategist': return (
+        <ContentStrategist 
+          dna={dna} 
+          onNavigate={navigateWithTopic}
+          userPlan={userPlan}
+          onUpgrade={handleOpenPlanModal}
+          onCreditsUpdate={handleCreditsUpdate}
+          userId={auth?.userId}
+        />
+      );
       case 'engine': return (
         <ContentEngine 
           dna={dna} 
@@ -200,7 +471,25 @@ const App: React.FC = () => {
           onAction={addToast} 
           onSchedulePost={handleSchedulePost}
           autoPostEnabled={autoPost}
-          onToggleAutoPost={setAutoPost}
+          onToggleAutoPost={async (val) => {
+            setAutoPost(val);
+            // Save to database
+            try {
+              await fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: 'auto_post_enabled', value: String(val) })
+              });
+              console.log('Auto-post setting saved:', val);
+              addToast(val ? 'Auto-post enabled - monitoring scheduled posts' : 'Auto-post disabled', 'success');
+            } catch (error) {
+              console.error('Error saving auto-post setting:', error);
+            }
+          }}
+          userPlan={userPlan}
+          onUpgrade={handleOpenPlanModal}
+          onCreditsUpdate={handleCreditsUpdate}
+          userId={auth?.userId}
         />
       );
       case 'calendar': return (
@@ -208,15 +497,29 @@ const App: React.FC = () => {
           scheduledPosts={scheduledPosts} 
           onAction={addToast} 
           autoPostMode={autoPost}
+          userId={auth?.userId || ''}
         />
       );
-      case 'connections': return <Connections onAction={addToast} />;
+      case 'connections': return <Connections onAction={addToast} onNavigate={(tab) => setActiveTab(tab)} />;
       case 'credentials': return <Credentials onAction={addToast} />;
-      case 'performance': return <PerformanceBrain onNavigate={navigateWithTopic} />;
-      case 'monetization': return <Monetization dna={dna} onAction={addToast} />;
+      case 'performance': return <PerformanceBrain onNavigate={navigateWithTopic} userId={auth?.userId || ''} />;
+      case 'monetization': return (
+        <Monetization 
+          dna={dna} 
+          onAction={addToast}
+          userPlan={userPlan}
+          onUpgrade={handleOpenPlanModal}
+          onCreditsUpdate={handleCreditsUpdate}
+          userId={auth?.userId}
+        />
+      );
+      case 'payment-history': return <PaymentHistory onAction={addToast} />;
+      case 'credits': return <Credits onAction={addToast} />;
+      case 'platform-responses': return <PlatformResponses onAction={addToast} auth={auth} />;
       case 'documentation': return <Documentation />;
       case 'adminposts': return <AdminPosts />;
-      default: return <Dashboard onNavigate={navigateWithTopic} hasDNA={!!dna} />;
+      case 'api-test': return <APIConnectionTest />;
+      default: return <Dashboard onNavigate={navigateWithTopic} hasDNA={!!dna} auth={auth} />;
     }
   };
 // Show loading while checking auth
@@ -233,12 +536,27 @@ const App: React.FC = () => {
 
   
   if (!auth) {
-    return <AdminLogin onLogin={(token, role) => setAuth({ token, role })} />;
+    return <AdminLogin onLogin={(authData) => {
+      console.log('🔐 Login successful, setting auth with userId:', authData.userId);
+      setAuth(authData);
+      setUserPlan({
+        plan: authData.plan,
+        credits: authData.credits,
+        maxCredits: authData.maxCredits
+      });
+    }} />;
   }
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} onAction={addToast} handleLogout={handleLogout} />
+      <Sidebar 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab} 
+        onAction={addToast} 
+        handleLogout={handleLogout}
+        userPlan={userPlan}
+        onPlanUpgrade={handlePlanUpgrade}
+      />
       
       <main className="flex-1 ml-64 min-h-screen pb-12">
         <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 py-4 flex justify-between items-center">
