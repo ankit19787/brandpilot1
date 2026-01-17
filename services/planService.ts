@@ -6,6 +6,7 @@ export interface PlanLimits {
   credits: number;
   analytics_days: number;
   autoPosting: boolean;
+  scheduling: boolean;
   teamSize: number;
   brandDNA: boolean;
   contentStrategy: boolean;
@@ -18,22 +19,24 @@ export const PLAN_LIMITS: Record<string, PlanLimits> = {
   free: {
     posts: 10,
     platforms: ['Instagram', 'Facebook'],
-    credits: 1000,
+    credits: 300,
     analytics_days: 7,
     autoPosting: false,
+    scheduling: false,
     teamSize: 1,
     brandDNA: false,
     contentStrategy: false,
     monetization: false,
     apiAccess: false,
-    customImages: false
+    customImages: true
   },
   pro: {
     posts: null, // unlimited
     platforms: ['Instagram', 'Facebook', 'X (Twitter)', 'LinkedIn', 'YouTube'],
-    credits: 10000,
+    credits: 1000,
     analytics_days: 90,
     autoPosting: true,
+    scheduling: true,
     teamSize: 1,
     brandDNA: true,
     contentStrategy: true,
@@ -44,9 +47,10 @@ export const PLAN_LIMITS: Record<string, PlanLimits> = {
   business: {
     posts: null, // unlimited
     platforms: ['Instagram', 'Facebook', 'X (Twitter)', 'LinkedIn', 'YouTube', 'WhatsApp'],
-    credits: 50000,
+    credits: 10000,
     analytics_days: 365,
     autoPosting: true,
+    scheduling: true,
     teamSize: 5,
     brandDNA: true,
     contentStrategy: true,
@@ -60,6 +64,7 @@ export const PLAN_LIMITS: Record<string, PlanLimits> = {
     credits: 999999, // effectively unlimited
     analytics_days: 99999,
     autoPosting: true,
+    scheduling: true,
     teamSize: 999,
     brandDNA: true,
     contentStrategy: true,
@@ -70,9 +75,9 @@ export const PLAN_LIMITS: Record<string, PlanLimits> = {
 };
 
 export const CREDIT_COSTS = {
-  generatePost: 10,
-  generateImage: 50,
-  brandDNAAnalysis: 100,
+  generatePost: 30,
+  generateImage: 30,
+  brandDNAAnalysis: 30,
   contentStrategy: 50,
   monetizationPlan: 30,
   publishPost: 5
@@ -83,9 +88,28 @@ export function canUseFeature(plan: string, feature: keyof PlanLimits): boolean 
   return limits[feature] as boolean;
 }
 
-export function canAccessPlatform(plan: string, platform: string): boolean {
+export function canAccessPlatform(plan: string, platform: string, userRole: string = 'user'): boolean {
   const limits = PLAN_LIMITS[plan] || PLAN_LIMITS.free;
+  
+  // Twitter/X access is restricted for non-admin users
+  if ((platform === 'X (Twitter)' || platform === 'Twitter' || platform === 'twitter') && userRole !== 'admin') {
+    return false;
+  }
+  
   return limits.platforms.includes(platform);
+}
+
+export function getFilteredPlatforms(plan: string, userRole: string = 'user'): string[] {
+  const limits = PLAN_LIMITS[plan] || PLAN_LIMITS.free;
+  
+  // For non-admin users, filter out Twitter/X from available platforms
+  if (userRole !== 'admin') {
+    return limits.platforms.filter(platform => 
+      platform !== 'X (Twitter)' && platform !== 'Twitter' && platform !== 'twitter'
+    );
+  }
+  
+  return limits.platforms;
 }
 
 export function hasCreditsFor(currentCredits: number, action: keyof typeof CREDIT_COSTS): boolean {

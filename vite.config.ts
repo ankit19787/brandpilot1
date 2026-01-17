@@ -23,6 +23,34 @@ export default defineConfig(({ mode }) => {
         },
       },
       plugins: [react()],
+      build: {
+        // Optimize bundle splitting
+        rollupOptions: {
+          output: {
+            manualChunks: {
+              'react-vendor': ['react', 'react-dom'],
+              'icons': ['lucide-react'],
+              'charts': ['recharts'],
+            },
+          },
+        },
+        // Increase chunk size warning limit
+        chunkSizeWarningLimit: 1000,
+        // Enable minification
+        minify: 'terser',
+        terserOptions: {
+          compress: {
+            drop_console: mode === 'production',
+            drop_debugger: mode === 'production',
+          },
+        },
+        // Enable sourcemaps for debugging in production
+        sourcemap: mode !== 'production',
+      },
+      // Optimize dependencies
+      optimizeDeps: {
+        include: ['react', 'react-dom', 'lucide-react'],
+      },
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
         'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)

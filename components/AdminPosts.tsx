@@ -6,6 +6,7 @@ const AdminPosts = () => {
   const [filteredPosts, setFilteredPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [userRole, setUserRole] = useState('user'); // Track user role
   
   // Filter states
   const [searchTerm, setSearchTerm] = useState('');
@@ -18,7 +19,7 @@ const AdminPosts = () => {
       try {
         setLoading(true);
         
-        // Get auth token from localStorage
+        // Get auth token and user info from localStorage
         const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
         const headers: HeadersInit = {};
         
@@ -26,7 +27,14 @@ const AdminPosts = () => {
           headers['Authorization'] = `Bearer ${authData.token}`;
         }
         
-        const response = await fetch('/api/posts/all', { headers });
+        // Set user role for UI display
+        setUserRole(authData.user?.role || 'user');
+        
+        // Use different endpoints based on user role
+        const isAdmin = authData.user?.role === 'admin';
+        const endpoint = isAdmin ? '/api/posts/all' : '/api/posts';
+        
+        const response = await fetch(endpoint, { headers });
         if (!response.ok) {
           throw new Error('Failed to fetch posts');
         }
@@ -99,7 +107,7 @@ const AdminPosts = () => {
   if (loading) {
     return (
       <div className="p-8">
-        <h2 className="text-2xl font-bold mb-4">All Social Posts</h2>
+        <h2 className="text-2xl font-bold mb-4">{userRole === 'admin' ? 'All Social Posts' : 'My Posts'}</h2>
         <p>Loading posts...</p>
       </div>
     );
@@ -108,7 +116,7 @@ const AdminPosts = () => {
   if (error) {
     return (
       <div className="p-8">
-        <h2 className="text-2xl font-bold mb-4">All Social Posts</h2>
+        <h2 className="text-2xl font-bold mb-4">{userRole === 'admin' ? 'All Social Posts' : 'My Posts'}</h2>
         <p className="text-red-600">Error: {error}</p>
       </div>
     );
@@ -117,7 +125,17 @@ const AdminPosts = () => {
   return (
     <div className="p-8 space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-slate-900">All Social Posts</h2>
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900">
+            {userRole === 'admin' ? 'All Social Posts' : 'My Posts'}
+          </h2>
+          <p className="text-sm text-slate-500 mt-1">
+            {userRole === 'admin' 
+              ? 'View and manage posts from all users'
+              : 'View and manage your social media posts'
+            }
+          </p>
+        </div>
         <div className="text-sm text-slate-500">
           Showing {filteredPosts.length} of {posts.length} posts
         </div>
@@ -160,7 +178,9 @@ const AdminPosts = () => {
               <option value="all">All Platforms</option>
               <option value="Instagram">Instagram</option>
               <option value="Facebook">Facebook</option>
-              <option value="X (Twitter)">X (Twitter)</option>
+              {userRole === 'admin' && (
+                <option value="X (Twitter)">X (Twitter)</option>
+              )}
             </select>
           </div>
 
@@ -223,25 +243,30 @@ const AdminPosts = () => {
             <table className="min-w-full divide-y divide-slate-200">
               <thead className="bg-slate-50">
                 <tr>
-                  <th className="py-3 px-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">User</th>
+                  {userRole === 'admin' && (
+                    <th className="py-3 px-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">User</th>
+                  )}
                   <th className="py-3 px-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Platform</th>
                   <th className="py-3 px-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Content</th>
                   <th className="py-3 px-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Image</th>
                   <th className="py-3 px-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Status</th>
+                  <th className="py-3 px-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Scheduled</th>
                   <th className="py-3 px-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Created</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {filteredPosts.map(post => (
                   <tr key={post.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="py-3 px-4 text-sm">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center">
-                          <User size={16} className="text-indigo-600" />
+                    {userRole === 'admin' && (
+                      <td className="py-3 px-4 text-sm">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center">
+                            <User size={16} className="text-indigo-600" />
+                          </div>
+                          <span className="font-medium text-slate-900">{post.user?.username || 'Unknown'}</span>
                         </div>
-                        <span className="font-medium text-slate-900">{post.user?.username || 'Unknown'}</span>
-                      </div>
-                    </td>
+                      </td>
+                    )}
                     <td className="py-3 px-4 text-sm">
                       <span className={`px-2 py-1 rounded-lg text-xs font-medium ${
                         post.platform === 'Instagram' ? 'bg-pink-100 text-pink-700' :
@@ -272,6 +297,28 @@ const AdminPosts = () => {
                       }`}>
                         {post.status}
                       </span>
+                    </td>
+                    <td className="py-3 px-4 text-sm text-slate-600">
+                      {post.scheduledFor ? (
+                        <div className="text-sm">
+                          <div className="font-medium text-slate-900">
+                            {new Date(post.scheduledFor).toLocaleDateString('en-US', { 
+                              month: 'short', 
+                              day: 'numeric', 
+                              year: 'numeric'
+                            })}
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            {new Date(post.scheduledFor).toLocaleTimeString('en-US', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              hour12: true
+                            })}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 text-xs">Not scheduled</span>
+                      )}
                     </td>
                     <td className="py-3 px-4 text-sm text-slate-600">
                       {new Date(post.createdAt).toLocaleDateString('en-US', { 

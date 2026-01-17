@@ -394,7 +394,25 @@ export async function publishToPlatform(platform, content, metadata) {
           if (!res1.ok || !data1.id) {
             const errorMessage = data1.error?.message || "Instagram Media Container Error";
             publishResult.platformError = errorMessage;
-            throw new Error(errorMessage);
+            
+            // Create enhanced error with Meta error details
+            const error = new Error(errorMessage);
+            error.status = res1.status;
+            error.data = data1;
+            error.headers = Object.fromEntries(res1.headers.entries());
+            
+            // Check if it's a rate limit error
+            if (data1.error && (data1.error.code === 4 || data1.error.code === 17 || data1.error.code === 32 || data1.error.code === 613)) {
+              error.isRateLimitError = true;
+              error.rateLimitInfo = {
+                errorCode: data1.error.code,
+                errorSubcode: data1.error.error_subcode,
+                errorMessage: data1.error.message,
+                estimatedTimeToRegain: data1.error.error_data?.estimated_time_to_regain_access
+              };
+            }
+            
+            throw error;
           }
           
           // Step 2: Publish the media
@@ -417,7 +435,25 @@ export async function publishToPlatform(platform, content, metadata) {
           if (!res2.ok) {
             const errorMessage = data2.error?.message || "Instagram Publish Error";
             publishResult.platformError = errorMessage;
-            throw new Error(errorMessage);
+            
+            // Create enhanced error with Meta error details
+            const error = new Error(errorMessage);
+            error.status = res2.status;
+            error.data = data2;
+            error.headers = Object.fromEntries(res2.headers.entries());
+            
+            // Check if it's a rate limit error
+            if (data2.error && (data2.error.code === 4 || data2.error.code === 17 || data2.error.code === 32 || data2.error.code === 613)) {
+              error.isRateLimitError = true;
+              error.rateLimitInfo = {
+                errorCode: data2.error.code,
+                errorSubcode: data2.error.error_subcode,
+                errorMessage: data2.error.message,
+                estimatedTimeToRegain: data2.error.error_data?.estimated_time_to_regain_access
+              };
+            }
+            
+            throw error;
           }
           
           publishResult.success = true;
@@ -452,7 +488,25 @@ export async function publishToPlatform(platform, content, metadata) {
             if (!res.ok) {
               const errorMessage = data.error?.message || "Facebook Photo Error";
               publishResult.platformError = errorMessage;
-              throw new Error(errorMessage);
+              
+              // Create enhanced error with Meta error details
+              const error = new Error(errorMessage);
+              error.status = res.status;
+              error.data = data;
+              error.headers = Object.fromEntries(res.headers.entries());
+              
+              // Check if it's a rate limit error
+              if (data.error && (data.error.code === 4 || data.error.code === 17 || data.error.code === 32 || data.error.code === 613)) {
+                error.isRateLimitError = true;
+                error.rateLimitInfo = {
+                  errorCode: data.error.code,
+                  errorSubcode: data.error.error_subcode,
+                  errorMessage: data.error.message,
+                  estimatedTimeToRegain: data.error.error_data?.estimated_time_to_regain_access
+                };
+              }
+              
+              throw error;
             }
             
             publishResult.success = true;
@@ -484,7 +538,25 @@ export async function publishToPlatform(platform, content, metadata) {
             if (!res.ok) {
               const errorMessage = data.error?.message || "Facebook Error";
               publishResult.platformError = errorMessage;
-              throw new Error(errorMessage);
+              
+              // Create enhanced error with Meta error details
+              const error = new Error(errorMessage);
+              error.status = res.status;
+              error.data = data;
+              error.headers = Object.fromEntries(res.headers.entries());
+              
+              // Check if it's a rate limit error
+              if (data.error && (data.error.code === 4 || data.error.code === 17 || data.error.code === 32 || data.error.code === 613)) {
+                error.isRateLimitError = true;
+                error.rateLimitInfo = {
+                  errorCode: data.error.code,
+                  errorSubcode: data.error.error_subcode,
+                  errorMessage: data.error.message,
+                  estimatedTimeToRegain: data.error.error_data?.estimated_time_to_regain_access
+                };
+              }
+              
+              throw error;
             }
             
             publishResult.success = true;

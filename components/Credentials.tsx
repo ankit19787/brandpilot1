@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 const BACKEND_API_URL = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:3001';
 import { 
@@ -39,6 +39,19 @@ interface PlatformCreds {
 }
 
 const Credentials: React.FC<CredentialsProps> = ({ onAction }) => {
+  const [userRole, setUserRole] = useState('user');
+  
+  // Get user role from localStorage
+  useEffect(() => {
+    try {
+      const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
+      setUserRole(authData.user?.role || 'user');
+    } catch (error) {
+      console.error('Error reading auth data:', error);
+      setUserRole('user');
+    }
+  }, []);
+
   const getAuthHeaders = () => {
     const authData = JSON.parse(localStorage.getItem('brandpilot_auth') || '{}');
     return {
@@ -186,10 +199,14 @@ const Credentials: React.FC<CredentialsProps> = ({ onAction }) => {
           });
         });
         
-        setPlatforms(Object.values(platformMap));
+        // Filter platforms based on user role - hide Twitter for non-admin users
+        const filteredPlatforms = Object.values(platformMap).filter(platform => 
+          userRole === 'admin' || platform.id !== 'x'
+        );
+        setPlatforms(filteredPlatforms);
       } catch (err) {
         // If backend not available, show empty platform templates
-        setPlatforms([
+        const defaultPlatforms = [
           {
             id: 'x',
             name: 'X (Twitter)',
@@ -214,11 +231,27 @@ const Credentials: React.FC<CredentialsProps> = ({ onAction }) => {
             isConfigured: false,
             fields: []
           }
+        ];
+        
+        // Filter default platforms based on user role
+        const filteredDefaultPlatforms = defaultPlatforms.filter(platform => 
+          userRole === 'admin' || platform.id !== 'x'
+        );
+        setPlatforms(filteredDefaultPlatforms);
+          },
+          {
+            id: 'instagram',
+            name: 'Instagram',
+            icon: Instagram,
+            color: 'text-pink-600',
+            isConfigured: false,
+            fields: []
+          }
         ]);
       }
     }
     fetchCredentials();
-  }, []);
+  }, [userRole]); // Reload when user role changes
 
   const activePlatform = platforms.find(p => p.id === selectedPlatform);
 
